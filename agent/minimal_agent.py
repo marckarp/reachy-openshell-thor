@@ -29,7 +29,7 @@ THINKING = os.getenv("CHAT_THINKING", "1" if "integrate.api.nvidia.com" in BASE_
 EXTRA = {} if THINKING else {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
 ROBOT = "http://host.openshell.internal:8000"    # the Reachy daemon, seen through OpenShell
 SPEAKER = "http://host.openshell.internal:8042"  # trusted speaker service (robot/speaker.py)
-SOUNDS = ["confused", "impatient", "wake_up", "sleep", "dance", "count"]
+SOUNDS = ["yes", "no", "confused", "impatient", "wake_up", "sleep", "dance", "count"]
 DENIED_SOUND = "confused"  # Reachy cannot talk yet, so it chirps when OpenShell says no
 
 # 1. What the model is told.
@@ -39,9 +39,11 @@ SYSTEM_PROMPT = (
     "alternate with front: 'nod twice' is down, front, down, front; 'shake your head' is "
     "left, right, left, right, front. Never send more than 8 poses; if asked for more, do 8 "
     "and say so. End sequences with front unless the user asked to hold a pose. "
-    "Only call play_sound when the user asks for a sound or a mood like confused, impatient, "
-    "wake up, sleep, dance, or count. If a tool result says policy_denied, say that OpenShell "
-    "policy blocked the action and do not retry. Keep replies to one short sentence."
+    "When the user asks Reachy to shake its head no, call play_sound with 'no' and then move_head; "
+    "when asked to nod yes, call play_sound with 'yes' and then move_head. "
+    "Otherwise only call play_sound when the user asks for a sound or a mood like confused, "
+    "impatient, wake up, sleep, dance, or count. If a tool result says policy_denied, say that "
+    "OpenShell policy blocked the action and do not retry. Keep replies to one short sentence."
 )
 
 # 2. The only thing the model may choose. The enum is the entire robot vocabulary.
@@ -86,10 +88,14 @@ def play_sound(name: str) -> dict:
     """Ask the trusted speaker service for one named sound. OpenShell allows or denies the POST."""
     if name not in SOUNDS:
         return {"status": "invalid_sound", "name": name}
-    r = httpx.post(f"{SPEAKER}/play", json={"name": name}, timeout=20)
+    try:
+        r = httpx.post(f"{SPEAKER}/play", json={"name": name}, timeout=20)
+    except httpx.HTTPError as exc:
+        return {"status": "speaker_unavailable", "name": name, "error": type(exc).__name__}
     if r.status_code == 403:
         return {"status": "policy_denied", "sound": name}
-    r.raise_for_status()
+    if r.status_code != 200:
+        return {"status": "speaker_error", "name": name, "http": r.status_code}
     return {"status": "played", "name": name}
 
 

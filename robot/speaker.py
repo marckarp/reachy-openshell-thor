@@ -20,15 +20,18 @@ from pydantic import BaseModel
 
 import reachy_mini
 
-ASSETS = Path(reachy_mini.__file__).parent / "assets"
+ASSETS = Path(reachy_mini.__file__).parent / "assets"      # Pollen's built-in sounds
+OURS = Path(__file__).parent / "sounds"                      # synthesized here (robot/sounds/)
 ALSA_DEVICE = "plughw:CARD=Audio,DEV=0"
 SOUNDS = {
-    "confused": "confused1.wav",
-    "impatient": "impatient1.wav",
-    "wake_up": "wake_up.wav",
-    "sleep": "go_sleep.wav",
-    "dance": "dance1.wav",
-    "count": "count.wav",
+    "confused": ASSETS / "confused1.wav",
+    "impatient": ASSETS / "impatient1.wav",
+    "wake_up": ASSETS / "wake_up.wav",
+    "sleep": ASSETS / "go_sleep.wav",
+    "dance": ASSETS / "dance1.wav",
+    "count": ASSETS / "count.wav",
+    "no": OURS / "no.wav",      # two low tones, "uh-uh"
+    "yes": OURS / "yes.wav",    # short rising chirp, "mm-hm"
 }
 
 app = FastAPI(title="Reachy speaker (trusted host service)")
@@ -52,7 +55,7 @@ def play(req: PlayRequest) -> dict:
     if not _lock.acquire(blocking=False):
         raise HTTPException(429, "a sound is already playing")
     try:
-        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, str(ASSETS / file)], check=True, timeout=15)
+        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, str(file)], check=True, timeout=15)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         raise HTTPException(502, f"speaker error: {type(exc).__name__}") from exc
     finally:
