@@ -181,11 +181,19 @@ def wait_for(move_id: str) -> None:
         time.sleep(0.05)
 
 
-def perform(steps: list) -> dict:
+def perform(steps) -> dict:
     """Send one clamped goto per step and wait for each. OpenShell allows or denies each POST."""
+    if isinstance(steps, str):                    # the model sometimes sends the array as a JSON string
+        try:
+            steps = json.loads(steps)
+        except ValueError:
+            print(f"[bad steps]   {steps[:200]!r}", file=sys.stderr)
+            return {"status": "invalid_steps", "detail": "steps must be a JSON array of pose objects"}
+    if isinstance(steps, dict):                   # or a single pose instead of a list
+        steps = [steps]
     steps = [s for s in (steps or []) if isinstance(s, dict)][:MAX_STEPS]
     if not steps:
-        return {"status": "no_steps"}
+        return {"status": "no_steps", "detail": "steps must be a JSON array of pose objects"}
     bodies = [to_goto(s) for s in steps]
     total = sum(b["duration"] for b in bodies)
     if total > MAX_TOTAL_S:                      # scale durations so the whole thing fits
@@ -210,7 +218,8 @@ def ask(client: OpenAI, messages: list, **kw):
     """One chat completion; if the free endpoint is full (503), retry on the fallback model."""
     for model in (MODEL, FALLBACK_MODEL):
         try:
-            return client.chat.completions.create(model=model, messages=messages, tools=TOOLS, **EXTRA, **kw)
+            return client.chat.completions.create(model=model, messages=messages, tools=TOOLS,
+                                                  temperature=0.3, **EXTRA, **kw)   # steadier tool JSON
         except Exception as exc:  # noqa: BLE001 - keep the example short
             if "503" not in str(exc) or model == FALLBACK_MODEL:
                 raise
@@ -238,7 +247,8 @@ def main(sentence: str, wav_b64: str | None = None) -> None:
         messages.append(msg)
         for call in msg.tool_calls:
             args = json.loads(call.function.arguments or "{}")
-            shown = {k: (f"{len(v)} steps" if k == "steps" else v) for k, v in args.items()}
+            shown = {k: (f"{len(v)} steps" if k == "steps" and isinstance(v, list) else
+                         f"steps as {type(v).__name__}!" if k == "steps" else v) for k, v in args.items()}
             print(f"[model chose] {call.function.name}({shown})")
 
             # 4. Python runs the tool inside the safe envelope and tells the model what happened.

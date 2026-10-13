@@ -28,13 +28,14 @@ MIC = "plughw:CARD=Audio,DEV=0"
 RATE = 16000
 CHUNK = 512                      # 32 ms, the window Silero expects at 16 kHz
 MODEL = Path(__file__).parent / "models" / "silero_vad.onnx"
+LAST_WAV = Path(__file__).parent / "logs" / "last-heard.wav"
 SPEAKER = "http://127.0.0.1:8042"
 AGENT = ["openshell", "sandbox", "exec", "--name", "reachy-agent", "--no-tty", "--",
          "/opt/venv/bin/python", "/sandbox/minimal_agent.py", "--audio"]
 
 START_PROB, END_PROB = 0.5, 0.35     # speech starts above START, counts as silence below END
 PRE_ROLL_S, END_SILENCE_S = 0.3, 0.7
-MIN_UTT_S, MAX_UTT_S = 0.6, 12.0
+MIN_UTT_S, MAX_UTT_S = 0.6, 8.0      # one request per clip; longer clips confuse the model
 
 
 class VAD:
@@ -101,7 +102,9 @@ def to_wav(pcm: np.ndarray) -> bytes:
 
 def turn(pcm: np.ndarray) -> None:
     print(f"heard {len(pcm) / RATE:.1f} s -> asking Reachy")
-    b64 = base64.b64encode(to_wav(pcm)).decode()
+    wav = to_wav(pcm)
+    LAST_WAV.write_bytes(wav)                       # for replay: base64 -w0 $LAST | sandbox exec ... --audio
+    b64 = base64.b64encode(wav).decode()
     res = subprocess.run(AGENT, input=b64, capture_output=True, text=True, timeout=120)
     reply, already_spoke = "", False
     for line in (res.stdout + res.stderr).splitlines():
