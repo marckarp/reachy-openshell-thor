@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 
 ask() {
   openshell sandbox exec --name reachy-agent --no-tty -- \
-    /opt/venv/bin/python /sandbox/minimal_agent.py "$1" 2>&1 | grep -E '^\[(model chose|robot said|reply|busy)\]|Error'
+    /opt/venv/bin/python /sandbox/minimal_agent.py "$1" 2>&1 | grep -E '^\[(model chose|robot said|reply|busy|spoke)\]|Error'
 }
 
 if [ $# -gt 0 ]; then

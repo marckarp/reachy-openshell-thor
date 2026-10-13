@@ -35,6 +35,7 @@ ROBOT = "http://host.openshell.internal:8000"    # the Reachy daemon, seen throu
 SPEAKER = "http://host.openshell.internal:8042"  # trusted speaker service (robot/speaker.py)
 SOUNDS = ["yes", "no", "love", "confused", "impatient", "wake_up", "sleep", "dance", "count"]
 DENIED_SOUND = "confused"  # audible "no" when OpenShell blocks a move
+DENIED_LINE = "OpenShell blocked me from doing that. OpenShell is powerful."  # spoken by Python, not the model
 
 # 1. The body the model is given. Degrees and millimetres in the schema (model-friendly);
 #    Python converts to the daemon's radians and metres. The daemon does NOT reject
@@ -174,6 +175,16 @@ def speak(text: str) -> dict:
     return {"status": "speaking", "chars": len(text)}   # plays in the background on the host
 
 
+def announce_denial() -> None:
+    """Chirp, then say the fixed line. Both go through the policy too; failures are not the result."""
+    try:
+        play_sound(DENIED_SOUND)
+        if speak(DENIED_LINE).get("status") == "speaking":
+            print(f"[spoke]       {DENIED_LINE}")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def wait_for(move_id: str) -> None:
     """The daemon reports running moves as a list of {"uuid": ...}; poll until ours is gone."""
     deadline = time.monotonic() + DUR[1] + 5
@@ -206,11 +217,9 @@ def perform(steps) -> dict:
     for body in bodies:
         r = httpx.post(f"{ROBOT}/api/move/goto", json=body, timeout=5)
         if r.status_code == 403:
-            try:
-                play_sound(DENIED_SOUND)  # audible "no"; itself subject to policy
-            except Exception:  # noqa: BLE001 - the denial is the result, not the sound
-                pass
-            return {"status": "policy_denied", "steps_done": done, "detail": r.json().get("detail", "")}
+            announce_denial()
+            return {"status": "policy_denied", "steps_done": done, "detail": r.json().get("detail", ""),
+                    "note": "already announced aloud; reply with one short sentence, do not repeat it"}
         r.raise_for_status()
         wait_for(r.json()["uuid"])
         done += 1

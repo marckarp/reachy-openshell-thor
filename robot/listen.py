@@ -108,9 +108,9 @@ def turn(pcm: np.ndarray) -> None:
     res = subprocess.run(AGENT, input=b64, capture_output=True, text=True, timeout=120)
     reply, already_spoke = "", False
     for line in (res.stdout + res.stderr).splitlines():
-        if line.startswith(("[model chose]", "[robot said]", "[reply]", "[busy]")) or "Error" in line:
+        if line.startswith(("[model chose]", "[robot said]", "[reply]", "[busy]", "[spoke]")) or "Error" in line:
             print("  " + line)
-        if line.startswith("[model chose] speak("):
+        if line.startswith(("[model chose] speak(", "[spoke]")):
             already_spoke = True
         if line.startswith("[reply]"):
             reply = line[len("[reply]"):].strip()

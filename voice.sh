@@ -18,10 +18,10 @@ turn() {
   arecord -q -D "$MIC" -f S16_LE -r 16000 -c 1 -d "${VOICE_SECONDS:-4}" "$WAV" || return
   out=$(base64 -w0 "$WAV" | openshell sandbox exec --name reachy-agent --no-tty -- \
     /opt/venv/bin/python /sandbox/minimal_agent.py --audio 2>&1 \
-    | grep -E '^\[(model chose|robot said|reply|busy)\]|Error')
+    | grep -E '^\[(model chose|robot said|reply|busy|spoke)\]|Error')
   printf '%s\n' "$out"
   reply=$(printf '%s\n' "$out" | sed -n 's/^\[reply\] *//p')
-  printf '%s\n' "$out" | grep -q '^\[model chose\] speak(' && reply=""   # already spoken by the tool
+  printf '%s\n' "$out" | grep -qE '^\[(model chose\] speak\(|spoke\])' && reply=""   # already spoken
   [ -n "$reply" ] && printf '%s' "$reply" \
     | python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()}))' \
     | curl -s -X POST 127.0.0.1:8042/say -H 'content-type: application/json' -d @- >/dev/null
