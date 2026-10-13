@@ -35,7 +35,8 @@ ROBOT = "http://host.openshell.internal:8000"    # the Reachy daemon, seen throu
 SPEAKER = "http://host.openshell.internal:8042"  # trusted speaker service (robot/speaker.py)
 SOUNDS = ["yes", "no", "love", "confused", "impatient", "wake_up", "sleep", "dance", "count"]
 DENIED_SOUND = "confused"  # audible "no" when OpenShell blocks a move
-DENIED_LINE = "OpenShell blocked me from doing that. OpenShell is powerful."  # spoken by Python, not the model
+DENIED_LINE = ("I tried to do it, but I was blocked. Must be because I am in a secure sandbox "
+               "and you have put policies blocking me.")  # spoken by Python on a 403, not by the model
 
 # 1. The body the model is given. Degrees and millimetres in the schema (model-friendly);
 #    Python converts to the daemon's radians and metres. The daemon does NOT reject
