@@ -8,8 +8,8 @@ Derived from, and documented against, material licensed under Apache License 2.0
 - NVIDIA OpenShell-Research, project `projects/use-case-examples/reachy-mini-openshell`
   (https://github.com/NVIDIA/OpenShell-Research), commit 6ea69fa. The policy files in
   `openshell/`, the sandbox Dockerfile idea, the fixed head-pose table and the tool design in
-  `agent/minimal_agent.py` follow that project. Two of its documents are kept verbatim in
-  `agent/docs/` (the dev note and the onboard setup guide).
+  `agent/minimal_agent.py` follow that project. Its dev note and onboard setup guide are in
+  that repository.
 - NVIDIA OpenShell provider profile `providers/nvidia.yaml`
   (https://github.com/NVIDIA/OpenShell), adapted as `openshell/reachy-nvidia.yaml`.
 

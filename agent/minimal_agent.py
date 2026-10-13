@@ -1,11 +1,15 @@
 """The whole idea in one file: sentence in, model picks a tool, Python moves the robot.
 
 Runs INSIDE the OpenShell sandbox (so the model key is a placeholder and the
-robot request crosses the policy). Same model, same tool, same poses as the
-full app in src/, with nothing else.
+robot request crosses the policy).
 
   openshell sandbox exec --name reachy-agent --no-tty -- \
       /opt/venv/bin/python /sandbox/minimal_agent.py "Reachy, look left"
+
+Or speak instead of type: base64 WAV on stdin, Nemotron Omni does the listening.
+
+  base64 -w0 voice.wav | openshell sandbox exec --name reachy-agent --no-tty -- \
+      /opt/venv/bin/python /sandbox/minimal_agent.py --audio
 """
 
 import json
@@ -45,7 +49,10 @@ SYSTEM_PROMPT = (
     "then move_head up, front. "
     "Otherwise only call play_sound when the user asks for a sound or a mood like confused, "
     "impatient, wake up, sleep, dance, or count. If a tool result says policy_denied, say that "
-    "OpenShell policy blocked the action and do not retry. Keep replies to one short sentence."
+    "OpenShell policy blocked the action and do not retry. You may also answer general questions "
+    "and chat; keep replies to one or two short sentences. Replies are spoken aloud: plain words, "
+    "no emoji, no markdown. After a tool call always finish with a short spoken sentence such as "
+    "'Done, I looked down.'"
 )
 
 # 2. The only thing the model may choose. The enum is the entire robot vocabulary.
@@ -147,9 +154,28 @@ def ask(client: OpenAI, messages: list, **kw):
             print(f"[busy] {model} is full, trying {FALLBACK_MODEL}", file=sys.stderr)
 
 
-def main(sentence: str) -> None:
+# Always-on listening (robot/listen.py) sends every utterance in the room. The model is the
+# wake word: it only acts when addressed, and the host drops IGNORE replies silently.
+AUDIO_PROMPT = (
+    " You are hearing a live microphone. First decide: did the speaker address you by name "
+    "(Reachy, hey Reachy, Richie, Reach)? If yes, respond: move if asked to move, otherwise answer "
+    "the question or remark like a friendly assistant, in one or two short spoken sentences. "
+    "If the speaker did not address you by name, or the audio is silence, noise, or unclear, "
+    "call no tools and reply with exactly: IGNORE"
+)
+
+
+def user_message(sentence: str, wav_b64: str | None) -> dict:
+    """Text from argv, or a base64 WAV from stdin that the model listens to directly (Omni does the ASR)."""
+    if wav_b64:
+        return {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": wav_b64, "format": "wav"}}]}
+    return {"role": "user", "content": sentence}
+
+
+def main(sentence: str, wav_b64: str | None = None) -> None:
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": sentence}]
+    system = SYSTEM_PROMPT + (AUDIO_PROMPT if wav_b64 else "")
+    messages = [{"role": "system", "content": system}, user_message(sentence, wav_b64)]
 
     # 4. Ask the model. It answers with text, or with one or more tool calls.
     #    Loop so "look left, then make a sound" can take several calls or rounds.
@@ -178,4 +204,7 @@ def main(sentence: str) -> None:
 
 
 if __name__ == "__main__":
-    main(" ".join(sys.argv[1:]) or "Reachy, look up.")
+    if sys.argv[1:2] == ["--audio"]:
+        main("", wav_b64=sys.stdin.read().strip())   # base64 WAV piped in by voice.sh
+    else:
+        main(" ".join(sys.argv[1:]) or "Reachy, look up.")

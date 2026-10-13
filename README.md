@@ -7,6 +7,8 @@ role so each part can be understood on its own.
 ```
 mkarp/
   talk.sh          <- run this. Type "look left" and Reachy does it.
+  voice.sh         <- or this. Press Enter, say "look left"; Reachy does it and answers out loud.
+  robot/listen.py  <- or this. Always listening; acts only when you address "Reachy".
   robot/           the robot by itself (no AI, no OpenShell)
   openshell/       the gatekeeper: policies, provider, gateway config. SETUP.md = how it was configured
   agent/           ONE file, minimal_agent.py: prompt, tool, word-to-pose table, model call. Dockerfile builds the sandbox image
@@ -37,6 +39,8 @@ Then `./talk.sh`. Starting from nothing? Follow `BRINGUP.md`.
   (six built-in Reachy sounds plus synthesized `yes`, `no` and `love` in `sounds/`) through the robot
   speaker over ALSA. The daemon's own audio path does not work on this host.
   The sandbox reaches it as `host.openshell.internal:8042`; it accepts names only, never paths.
+  It also has `POST /say {"text": ...}` (Kokoro TTS, weights in `robot/models/`) which only the
+  host may call: the policy allows the sandbox `POST /play` and nothing else on 8042.
 - `usbreset.sh` fixes the Thor's internal USB hub when the robot vanishes from `lsusb`. Needs sudo.
 - `logs/reachy-daemon.log` daemon log.
 
@@ -67,6 +71,79 @@ After editing the agent, push it into the running sandbox without a rebuild:
 openshell sandbox exec --name reachy-agent --no-tty -- sh -c 'cat > /sandbox/minimal_agent.py' < agent/minimal_agent.py
 ```
 
+## Talk out loud: voice.sh
+
+```sh
+./voice.sh            # press Enter, speak for 4 s, Reachy acts and answers
+./voice.sh --once
+```
+
+No separate speech-to-text model. The mic WAV (ALSA card `Audio`, 16 kHz mono) is base64-piped
+into the sandbox, and `minimal_agent.py --audio` sends it to Nemotron 3 Nano Omni as an
+`input_audio` part. Omni has a Parakeet audio encoder built in, so it listens, reasons, and
+picks `move_head` in one call. The robot request then takes the exact same policy path as
+`talk.sh`. The `[reply]` line is spoken by the host via `POST /say` on the speaker service.
+
+```
+mic -> arecord -> base64 -> sandbox agent -> Omni (vLLM :8001, listens) -> tool call
+    -> POST /api/move/goto -> OpenShell policy -> daemon -> motors
+    -> [reply] -> host: /say (Kokoro) -> robot speaker
+```
+
+Omni audio-in needs the local vLLM (`CHAT_BASE_URL` set). Requires `kokoro-onnx` in `robot/venv`
+and the two files in `robot/models/` (see `BRINGUP.md`).
+
+### How audio goes in and out
+
+Audio is never streamed to the model. It moves as one clip per sentence:
+
+```
+IN   robot mic (USB, ALSA card "Audio", 16 kHz mono)
+     -> host: arecord keeps the mic open; Silero VAD scores each 32 ms slice "speech / not speech"
+     -> speech starts: host buffers (plus 0.3 s pre-roll); 0.7 s of silence: the sentence is cut
+     -> one WAV (~1-6 s) -> base64 text -> stdin of `openshell sandbox exec` -> agent --audio
+     -> agent puts the WAV in a single chat request as {"type":"input_audio"} -> vLLM :8001
+     -> Omni's built-in audio encoder turns it into tokens; the LLM reasons, picks a tool, replies
+OUT  reply text -> back out of the sandbox on stdout as "[reply] ..."
+     -> host: POST /say to robot/speaker.py -> Kokoro (CPU, ~0.5 s per sentence) -> WAV
+     -> aplay on the same USB card -> robot speaker
+     -> mic was closed while speaking; reopens, back to VAD
+```
+
+Consequences: ~1-2 s between the end of your sentence and the answer; no barge-in or
+mid-sentence reaction; a 4 s clip is ~128 KB of base64 through the exec channel; while the room
+is quiet nothing crosses the sandbox boundary at all. The sandbox never touches the mic or the
+speaker device; it only ever sees a WAV on stdin and prints text.
+
+### Always on: robot/listen.py
+
+```sh
+robot/venv/bin/python robot/listen.py
+```
+
+Same turn as `voice.sh`, but hands-free. Silero VAD (2 MB ONNX, CPU, `robot/models/silero_vad.onnx`)
+watches the mic 32 ms at a time; when speech starts it buffers, when 0.7 s of silence follows it
+sends that one utterance. There is no separate wake-word model: the agent's `AUDIO_PROMPT` tells
+Omni to reply exactly `IGNORE` unless the speaker addressed Reachy, and the host drops those
+replies silently. The mic is closed while Reachy speaks so it does not hear itself.
+
+Trade-off: every utterance in the room reaches the GPU (~1 s) and the sandbox. For a demo that is
+fine; a shipped product would put a wake-word model (openWakeWord, Porcupine) in front of the VAD.
+
+Everything above is on-device: Silero VAD and Kokoro TTS on the host CPU, Nemotron Omni on the
+Thor GPU via vLLM. Nothing leaves the machine.
+
+## Models in use (all on the Thor)
+
+| Job | Model | Runs where | Called by |
+|---|---|---|---|
+| Understand text or speech, pick the tool, write the reply | Nemotron 3 Nano Omni 30B-A3B (NVFP4), audio encoder built in | GPU, vLLM container `reachy-vllm`, :8001 | sandbox agent, through the OpenShell `local-vllm` provider |
+| Hear when speech starts and stops | Silero VAD v5 (2 MB ONNX) | host CPU, `robot/listen.py` | host only |
+| Speak the reply | Kokoro-82M (ONNX) | host CPU, `robot/speaker.py` `/say` on :8042 | host only; sandbox gets 403 |
+
+Weights: Omni in `~/.cache/huggingface`, Silero and Kokoro in `robot/models/`. No cloud calls;
+`build.nvidia.com` is only used if the sandbox is recreated with `--provider reachy-nvidia`.
+
 ## Model: hosted or local
 
 By default the agent calls Nemotron 3 Nano Omni on build.nvidia.com through the `reachy-nvidia`
@@ -80,3 +157,33 @@ you -> talk.sh -> sandbox agent -> (OpenShell proxy adds key) -> Nemotron on bui
     -> OpenShell policy allow/deny -> Reachy daemon -> USB serial -> motors
 
 Open `openshell-walkthrough.html` for the picture.
+
+## Testing the policy boundary
+
+Hot-swap to the deny policy and send the same sentence:
+
+```sh
+openshell policy set reachy-agent --policy openshell/policy-motion-disabled.yaml --wait
+./talk.sh "Reachy, look left"
+```
+
+Expected output — model still calls the tool, gateway blocks it, agent plays the confused chirp:
+```
+[model chose] move_head({'directions': ['left']})
+[robot said]  {'status': 'policy_denied', 'direction': 'left', 'detail': 'POST /api/move/goto not permitted by policy'}
+[reply]       OpenShell policy blocked the action.
+```
+
+Confirm in the gateway log (the speaker POST is ALLOWED even under the deny policy):
+```sh
+openshell logs reachy-agent | grep -E "ALLOWED|DENIED" | tail -5
+```
+
+Restore motion and verify the head moves:
+```sh
+openshell policy set reachy-agent --policy openshell/policy-motion-enabled.yaml --wait
+./talk.sh "Reachy, look left"
+# [robot said]  {'status': 'completed', 'directions': ['left']}
+```
+
+The policy swap is instant and live — no sandbox restart needed.

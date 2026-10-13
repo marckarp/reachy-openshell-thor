@@ -54,10 +54,11 @@
   svg .arrow-ok { stroke: var(--accent); marker-end: url(#head-ok); }
   svg .lbl { font-size: 11.5px; fill: var(--muted); }
   ol.steps { padding-left: 0; list-style: none; counter-reset: s; max-width: 72ch; }
-  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2.2rem 1fr; gap: .25rem .75rem; padding: .7rem 0; border-top: 1px solid var(--line); }
-  ol.steps li::before { content: counter(s); font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
-  ol.steps li strong { font-weight: 600; }
-  ol.steps li .file { grid-column: 2; color: var(--muted); font-size: .88rem; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2rem 1fr; gap: 0 .75rem; padding: .75rem 0; border-top: 1px solid var(--line); align-items: start; }
+  ol.steps li::before { content: counter(s); font-family: var(--font-mono); color: var(--accent); font-weight: 500; padding-top: .05rem; }
+  ol.steps li .body { grid-column: 2; line-height: 1.55; }
+  ol.steps li strong { font-weight: 600; display: block; margin-bottom: .2rem; }
+  ol.steps li .file { display: block; margin-top: .35rem; color: var(--muted); font-size: .83rem; line-height: 1.5; }
   table { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: .5rem; }
   th, td { text-align: left; vertical-align: top; padding: .55rem .6rem; border-top: 1px solid var(--line); }
   th { font-weight: 600; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
@@ -75,10 +76,10 @@
   <p class="lede">What happens between typing "Reachy, look up" and the motors moving, which process does each step, and which file to open to see it.</p>
 
   <h2>The path of one request</h2>
-  <p>Everything runs on the Jetson Thor except the model. Dashed green is the sandbox boundary. Nothing inside it can reach the network, the robot, or the API key except through the OpenShell gateway.</p>
+  <p>Everything runs on the Jetson Thor — including the model (vLLM on port 8001). Dashed green is the sandbox boundary. Nothing inside it can reach the network, the robot, or port 8001 except through the OpenShell gateway.</p>
   <div class="legend">
     <span style="--c: var(--accent)">OpenShell</span>
-    <span style="--c: var(--model)">Model on build.nvidia.com</span>
+    <span style="--c: var(--model)">Model on local vLLM (:8001)</span>
     <span style="--c: var(--robot)">Robot hardware</span>
     <span style="--c: var(--deny)">Blocked by policy</span>
   </div>
@@ -93,9 +94,11 @@
     </defs>
 
     <!-- You -->
-    <rect class="box" x="20" y="150" width="130" height="70" rx="4"/>
-    <text x="85" y="178" text-anchor="middle" font-weight="600">You</text>
-    <text x="85" y="198" text-anchor="middle" class="t-mono">./talk.sh</text>
+    <rect class="box" x="20" y="140" width="130" height="90" rx="4"/>
+    <text x="85" y="163" text-anchor="middle" font-weight="600">You</text>
+    <text x="85" y="182" text-anchor="middle" class="t-mono">./talk.sh  (type)</text>
+    <text x="85" y="198" text-anchor="middle" class="t-mono">./voice.sh (speak)</text>
+    <text x="85" y="214" text-anchor="middle" class="t-mono">listen.py (always on)</text>
 
     <!-- Sandbox boundary -->
     <rect class="box-sandbox" x="190" y="40" width="330" height="300" rx="8"/>
@@ -110,8 +113,8 @@
 
     <!-- env -->
     <rect class="box" x="215" y="270" width="280" height="50" rx="4"/>
-    <text x="355" y="290" text-anchor="middle" class="t-muted">key arrives as a placeholder token</text>
-    <text x="355" y="308" text-anchor="middle" class="t-mono">NVIDIA_API_KEY=&lt;opaque&gt;</text>
+    <text x="355" y="290" text-anchor="middle" class="t-muted">gateway grants access to host port 8001</text>
+    <text x="355" y="308" text-anchor="middle" class="t-mono">CHAT_BASE_URL=host.openshell.internal:8001</text>
 
     <!-- Gateway -->
     <rect class="box box-gate" x="590" y="40" width="150" height="300" rx="6"/>
@@ -129,9 +132,9 @@
 
     <!-- Model -->
     <rect class="box box-model" x="800" y="60" width="140" height="80" rx="4"/>
-    <text x="870" y="85" text-anchor="middle" font-weight="600">Nemotron 3</text>
-    <text x="870" y="103" text-anchor="middle" class="t-muted">Nano Omni</text>
-    <text x="870" y="124" text-anchor="middle" class="t-mono">integrate.api.nvidia.com</text>
+    <text x="870" y="83" text-anchor="middle" font-weight="600">Nemotron 3 Nano Omni</text>
+    <text x="870" y="101" text-anchor="middle" class="t-muted">vLLM · listens to audio too</text>
+    <text x="870" y="124" text-anchor="middle" class="t-mono">host · port 8001</text>
 
     <!-- Daemon -->
     <rect class="box box-robot" x="800" y="200" width="140" height="80" rx="4"/>
@@ -147,7 +150,7 @@
     <!-- Arrows -->
     <!-- you -> agent -->
     <path class="arrow" d="M150 185 H213"/>
-    <text x="181" y="178" text-anchor="middle" class="lbl">sentence</text>
+    <text x="181" y="178" text-anchor="middle" class="lbl">text or WAV</text>
 
     <!-- agent -> gateway -> model (top lane) -->
     <path class="arrow arrow-model" d="M495 160 H588"/>
@@ -183,23 +186,162 @@
   <h2>Step by step</h2>
   <p>Paths below are relative to <code>~/Desktop/mkarp</code>.</p>
   <ol class="steps">
-    <li><strong>You type a sentence.</strong> <code>talk.sh</code> runs <code>openshell sandbox exec</code>, which relays the command into the VM and runs the test entry point there.
-      <span class="file">talk.sh · agent/minimal_agent.py (copied to /sandbox/minimal_agent.py)</span></li>
-    <li><strong>The agent builds the request.</strong> It loads the 13-line system prompt, attaches the three tool schemas, and appends your sentence.
-      <span class="file">agent/minimal_agent.py: <code>SYSTEM_PROMPT</code> and <code>TOOLS</code></span></li>
-    <li><strong>The request leaves the sandbox toward the model.</strong> OpenShell checks the calling binary and destination, then the provider proxy replaces the placeholder key with your real NVIDIA key. The key never exists inside the VM.
-      <span class="file">openshell/reachy-nvidia.yaml · <code>openshell provider get reachy-nvidia</code></span></li>
-    <li><strong>The model answers with a tool call,</strong> for example <code>move_head(directions=["up"])</code>. The schema's enum means it can only ever say one of five words.
-      <span class="file">agent/minimal_agent.py: <code>ask()</code></span></li>
-    <li><strong>Python turns the word into a fixed pose.</strong> "up" becomes pitch -30°, yaw 0°, one second, minjerk. It sends <code>POST /api/move/goto</code> to <code>host.openshell.internal:8000</code>.
-      <span class="file">agent/minimal_agent.py: <code>POSES</code> and <code>move_head()</code></span></li>
-    <li><strong>OpenShell decides.</strong> The active policy either has an allow rule for that method and path or it does not. <span class="deny">Denied</span> returns a 403 with a readable reason. <span class="ok">Allowed</span> forwards the request to the daemon on the host.
-      <span class="file">openshell/policy-*.yaml · <code>openshell logs reachy-agent</code> shows ALLOWED / DENIED lines</span></li>
-    <li><strong>The daemon moves the head.</strong> It solves the six motor angles, runs a 50 Hz control loop, and writes servo packets over USB serial.
-      <span class="file">robot/venv/lib/python3.12/site-packages/reachy_mini/daemon/app/routers/move.py · start-daemon.sh</span></li>
-    <li><strong>The result goes back to the model,</strong> which writes the reply you see: "Nod completed" or "OpenShell policy blocked the request". It does not retry a denial.
-      <span class="file">agent/minimal_agent.py: end of <code>main()</code></span></li>
+    <li><div class="body"><strong>You type or speak.</strong> <code>talk.sh</code> passes a sentence; <code>voice.sh</code> and <code>robot/listen.py</code> record the robot mic and base64-pipe a WAV on stdin. Either way <code>openshell sandbox exec</code> relays it into the VM. <code>listen.py</code> keeps the mic open and uses Silero VAD (host CPU) to cut one WAV per utterance.
+      <span class="file">talk.sh · voice.sh · robot/listen.py · agent/minimal_agent.py (copied to /sandbox/minimal_agent.py)</span></div></li>
+    <li><div class="body"><strong>The agent builds the request.</strong> It loads the system prompt, attaches the two tool schemas, and appends your sentence, or an <code>input_audio</code> part holding the WAV. Omni has an audio encoder, so no separate speech-to-text model exists anywhere. In audio mode the prompt adds: if not addressed as Reachy, reply <code>IGNORE</code>.
+      <span class="file">agent/minimal_agent.py: <code>SYSTEM_PROMPT</code>, <code>AUDIO_PROMPT</code>, <code>TOOLS</code>, <code>user_message()</code></span></div></li>
+    <li><div class="body"><strong>The request leaves the sandbox toward the model.</strong> OpenShell checks the calling binary and destination. The <code>local-vllm</code> provider has no API key — it only grants the sandbox permission to reach port 8001 on the host where vLLM is running.
+      <span class="file">openshell/local-vllm.yaml · <code>openshell provider get local-vllm</code></span></div></li>
+    <li><div class="body"><strong>The model answers with a tool call,</strong> for example <code>move_head(directions=["up"])</code>. The schema's enum means it can only ever say one of five words.
+      <span class="file">agent/minimal_agent.py: <code>ask()</code></span></div></li>
+    <li><div class="body"><strong>Python turns the word into a fixed pose.</strong> "up" becomes pitch -30°, yaw 0°, one second, minjerk. It sends <code>POST /api/move/goto</code> to <code>host.openshell.internal:8000</code>.
+      <span class="file">agent/minimal_agent.py: <code>POSES</code> and <code>move_head()</code></span></div></li>
+    <li><div class="body"><strong>OpenShell decides.</strong> The active policy either has an allow rule for that method and path or it does not. <span class="deny">Denied</span> returns a 403 with a readable reason. <span class="ok">Allowed</span> forwards the request to the daemon on the host.
+      <span class="file">openshell/policy-*.yaml · <code>openshell logs reachy-agent</code> shows ALLOWED / DENIED lines</span></div></li>
+    <li><div class="body"><strong>The daemon moves the head.</strong> It solves the six motor angles, runs a 50 Hz control loop, and writes servo packets over USB serial.
+      <span class="file">robot/venv/lib/python3.12/site-packages/reachy_mini/daemon/app/routers/move.py · start-daemon.sh</span></div></li>
+    <li><div class="body"><strong>The result goes back to the model,</strong> which writes the reply you see: "Nod completed" or "OpenShell policy blocked the request". It does not retry a denial.
+      <span class="file">agent/minimal_agent.py: end of <code>main()</code></span></div></li>
+    <li><div class="body"><strong>The host speaks the reply.</strong> <code>voice.sh</code> / <code>listen.py</code> read the <code>[reply]</code> line and call <code>POST /say</code> on the trusted speaker service, which runs Kokoro TTS on the host CPU and plays it on the robot speaker. The policy allows the sandbox only <code>POST /play</code> on that port; a sandbox call to <code>/say</code> gets 403. <code>IGNORE</code> replies are dropped silently.
+      <span class="file">robot/speaker.py: <code>say()</code> · robot/models/kokoro-v1.0.onnx</span></div></li>
   </ol>
+
+  <h2>How audio goes in and out</h2>
+  <p>Audio is never streamed to the model. It moves as one clip per sentence, and only the host touches the mic and speaker. Top lane: your voice going in. Bottom lane: the reply coming out.</p>
+  <div class="legend">
+    <span style="--c: var(--robot)">Robot hardware</span>
+    <span style="--c: var(--fg)">Host software (Thor, outside the sandbox)</span>
+    <span style="--c: var(--accent)">Inside the OpenShell sandbox</span>
+    <span style="--c: var(--model)">Model on the Thor GPU</span>
+  </div>
+
+  <div class="diagram">
+  <svg viewBox="0 0 960 400" role="img" aria-label="Audio in: mic, arecord, Silero VAD, WAV, base64 on stdin, agent, input_audio, Omni. Audio out: reply text on stdout, /say, Kokoro, aplay, speaker.">
+    <!-- lane labels -->
+    <text x="20" y="30" font-weight="600">IN  · you speak</text>
+    <text x="20" y="240" font-weight="600">OUT · Reachy answers</text>
+
+    <!-- ===== IN lane (y 50-170) ===== -->
+    <!-- mic -->
+    <rect class="box box-robot" x="20" y="60" width="120" height="90" rx="4"/>
+    <text x="80" y="85" text-anchor="middle" font-weight="600">Robot mic</text>
+    <text x="80" y="103" text-anchor="middle" class="t-muted">USB audio card</text>
+    <text x="80" y="121" text-anchor="middle" class="t-mono">plughw:CARD=Audio</text>
+    <text x="80" y="137" text-anchor="middle" class="t-mono">16 kHz mono</text>
+
+    <!-- host: arecord + VAD -->
+    <rect class="box" x="170" y="60" width="200" height="90" rx="4"/>
+    <text x="270" y="82" text-anchor="middle" font-weight="600">arecord → Silero VAD</text>
+    <text x="270" y="100" text-anchor="middle" class="t-muted">mic always open · CPU</text>
+    <text x="270" y="116" text-anchor="middle" class="t-muted">scores each 32 ms slice: speech?</text>
+    <text x="270" y="132" text-anchor="middle" class="t-muted">start → buffer · 0.7 s quiet → cut</text>
+    <text x="270" y="147" text-anchor="middle" class="t-mono">robot/listen.py</text>
+
+    <!-- wav / base64 -->
+    <rect class="box" x="400" y="72" width="120" height="66" rx="4"/>
+    <text x="460" y="94" text-anchor="middle" font-weight="600">one WAV</text>
+    <text x="460" y="111" text-anchor="middle" class="t-muted">1–6 s · ~128 KB b64</text>
+    <text x="460" y="128" text-anchor="middle" class="t-mono">base64 → stdin</text>
+
+    <!-- sandbox agent -->
+    <rect class="box-sandbox" x="550" y="50" width="200" height="110" rx="8"/>
+    <text x="560" y="66" class="t-muted">sandbox</text>
+    <rect class="box" x="565" y="76" width="170" height="72" rx="4"/>
+    <text x="650" y="98" text-anchor="middle" font-weight="600">minimal_agent.py</text>
+    <text x="650" y="115" text-anchor="middle" class="t-mono">--audio</text>
+    <text x="650" y="132" text-anchor="middle" class="t-muted">WAV → input_audio part</text>
+
+    <!-- model -->
+    <rect class="box box-model" x="800" y="60" width="140" height="90" rx="4"/>
+    <text x="870" y="82" text-anchor="middle" font-weight="600">Nemotron Omni</text>
+    <text x="870" y="99" text-anchor="middle" class="t-muted">audio encoder + LLM</text>
+    <text x="870" y="115" text-anchor="middle" class="t-muted">hears · decides · replies</text>
+    <text x="870" y="138" text-anchor="middle" class="t-mono">vLLM :8001 · GPU</text>
+
+    <!-- IN arrows -->
+    <path class="arrow" d="M140 105 H168"/>
+    <path class="arrow" d="M370 105 H398"/>
+    <path class="arrow" d="M520 105 H563"/>
+    <text x="541" y="98" text-anchor="middle" class="lbl">exec</text>
+    <path class="arrow arrow-model" d="M735 105 H798"/>
+    <text x="766" y="98" text-anchor="middle" class="lbl">via gateway</text>
+
+    <!-- ===== OUT lane (y 260-380) ===== -->
+    <!-- model reply -->
+    <rect class="box box-model" x="800" y="270" width="140" height="80" rx="4"/>
+    <text x="870" y="295" text-anchor="middle" font-weight="600">reply text</text>
+    <text x="870" y="313" text-anchor="middle" class="t-muted">"Done, I looked left."</text>
+    <text x="870" y="331" text-anchor="middle" class="t-muted">or IGNORE · or a tool call</text>
+
+    <!-- sandbox stdout -->
+    <rect class="box-sandbox" x="550" y="260" width="200" height="100" rx="8"/>
+    <text x="560" y="276" class="t-muted">sandbox</text>
+    <rect class="box" x="565" y="286" width="170" height="62" rx="4"/>
+    <text x="650" y="308" text-anchor="middle" font-weight="600">prints on stdout</text>
+    <text x="650" y="328" text-anchor="middle" class="t-mono">[reply] ...</text>
+
+    <!-- host: listen.py decides -->
+    <rect class="box" x="400" y="270" width="120" height="80" rx="4"/>
+    <text x="460" y="293" text-anchor="middle" font-weight="600">listen.py</text>
+    <text x="460" y="311" text-anchor="middle" class="t-muted">IGNORE → drop</text>
+    <text x="460" y="329" text-anchor="middle" class="t-muted">else POST /say</text>
+
+    <!-- host: speaker service -->
+    <rect class="box" x="170" y="270" width="200" height="80" rx="4"/>
+    <text x="270" y="292" text-anchor="middle" font-weight="600">speaker.py → Kokoro TTS</text>
+    <text x="270" y="310" text-anchor="middle" class="t-muted">text → WAV · CPU · ~0.5 s</text>
+    <text x="270" y="326" text-anchor="middle" class="t-mono">aplay -D plughw:CARD=Audio</text>
+    <text x="270" y="342" text-anchor="middle" class="t-mono">:8042 /say (host only)</text>
+
+    <!-- speaker -->
+    <rect class="box box-robot" x="20" y="270" width="120" height="80" rx="4"/>
+    <text x="80" y="298" text-anchor="middle" font-weight="600">Robot speaker</text>
+    <text x="80" y="318" text-anchor="middle" class="t-muted">same USB card</text>
+    <text x="80" y="336" text-anchor="middle" class="t-muted">mic closed meanwhile</text>
+
+    <!-- OUT arrows (right to left) -->
+    <path class="arrow arrow-model" d="M800 310 H752"/>
+    <path class="arrow" d="M565 317 H522"/>
+    <path class="arrow" d="M400 310 H372"/>
+    <path class="arrow" d="M170 310 H142"/>
+
+    <!-- vertical link: model in -> model out -->
+    <path class="arrow arrow-model" d="M870 150 V268"/>
+    <text x="905" y="212" text-anchor="middle" class="lbl">~1 s</text>
+
+    <!-- footer -->
+    <text x="20" y="385" class="t-muted">Only the two robot boxes and the three host boxes touch audio devices. The sandbox sees a WAV on stdin and prints text.</text>
+  </svg>
+  </div>
+
+  <h3 style="font-size:1rem; font-weight:600; margin:1.5rem 0 .25rem">Software at each hop</h3>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Hop</th><th>Software</th><th>What it does</th></tr>
+    <tr><td>Capture</td><td><code>arecord</code> (ALSA)</td><td>Keeps the USB mic open, raw 16-bit PCM at 16 kHz mono, piped to Python</td></tr>
+    <tr><td>Slicing</td><td>Silero VAD v5, ONNX Runtime, CPU</td><td>Per 32 ms slice: probability that someone is speaking. Starts a buffer above 0.5, cuts the clip after 0.7 s below 0.35. Knows no words.</td></tr>
+    <tr><td>Transport in</td><td><code>base64</code> + <code>openshell sandbox exec</code> stdin</td><td>The only way bytes enter the VM. Text-safe, byte-exact (verified with md5).</td></tr>
+    <tr><td>Request</td><td><code>openai</code> Python client inside the sandbox</td><td>One <code>chat.completions</code> call; the WAV rides as <code>{"type":"input_audio","format":"wav"}</code></td></tr>
+    <tr><td>Listening + thinking</td><td>Nemotron 3 Nano Omni 30B-A3B NVFP4 on vLLM 0.31 (GPU)</td><td>Built-in Parakeet-style audio encoder turns the clip into tokens; the same LLM decides IGNORE / tool call / answer. No separate STT.</td></tr>
+    <tr><td>Transport out</td><td>stdout of the exec</td><td><code>[reply] ...</code> line, read by the host</td></tr>
+    <tr><td>Speech</td><td>Kokoro-82M, ONNX Runtime, CPU, inside <code>robot/speaker.py</code></td><td>Text to 24 kHz WAV in about half a second per sentence</td></tr>
+    <tr><td>Playback</td><td><code>aplay</code> (ALSA)</td><td>Same USB card as the mic. <code>listen.py</code> keeps the mic closed until playback ends.</td></tr>
+  </table>
+  </div>
+
+  <ol class="steps">
+    <li><div class="body"><strong>Mic stays open on the host.</strong> <code>arecord</code> reads the robot's USB audio card at 16 kHz mono. Silero VAD (2 MB ONNX, CPU) scores each 32 ms slice as speech or not. Nothing leaves the host while the room is quiet.
+      <span class="file">robot/listen.py: <code>VAD</code>, <code>capture_utterance()</code></span></div></li>
+    <li><div class="body"><strong>One sentence becomes one WAV.</strong> Speech starts: buffer, with 0.3 s of pre-roll. 0.7 s of silence: cut. The clip is base64 text, piped on stdin through <code>openshell sandbox exec</code> into the VM. A 4 s clip is about 128 KB.
+      <span class="file">robot/listen.py: <code>turn()</code> · voice.sh does the same with a fixed 4 s recording</span></div></li>
+    <li><div class="body"><strong>The model listens to the file.</strong> The agent puts the WAV in a single chat request as an <code>input_audio</code> part. Omni's built-in audio encoder turns it into tokens; the same LLM then reasons, picks <code>move_head</code> or answers, or replies <code>IGNORE</code> if you were not talking to it. There is no separate speech-to-text model.
+      <span class="file">agent/minimal_agent.py: <code>user_message()</code>, <code>AUDIO_PROMPT</code></span></div></li>
+    <li><div class="body"><strong>Text comes back out.</strong> The reply leaves the sandbox the only way anything does: printed on stdout as <code>[reply] ...</code>. The host reads it.
+      <span class="file">robot/listen.py: <code>turn()</code></span></div></li>
+    <li><div class="body"><strong>The host speaks.</strong> <code>POST /say</code> to the trusted speaker service. Kokoro (CPU, about half a second per sentence) renders a WAV, <code>aplay</code> sends it to the same USB card. The mic is closed during playback so Reachy does not hear itself, then reopens.
+      <span class="file">robot/speaker.py: <code>say()</code></span></div></li>
+  </ol>
+  <p>Consequences: 1 to 2 s between the end of your sentence and the answer, no barge-in or mid-sentence reaction, and the sandbox never sees an audio device, only a WAV on stdin.</p>
 
   <div class="note">
     <p><strong>Why the split matters.</strong> The model handles fuzzy language but can only emit one of five words. Python owns the numbers. OpenShell owns the yes/no on the endpoint. No prompt injection can turn "look up" into a raw motor command, because the sandbox has no path to <code>/api/move/set_target</code> or the motor routes at all.</p>
@@ -213,8 +355,10 @@
     <tr><td>Sandbox</td><td>KVM VM named <code>reachy-agent</code></td><td><code>openshell sandbox get reachy-agent</code> · shell in with <code>openshell sandbox exec --name reachy-agent -- sh</code></td></tr>
     <tr><td>Agent code</td><td>inside the VM at <code>/opt/venv</code></td><td>built from <code>agent/Dockerfile</code>; image <code>reachy-agent-minimal:latest</code></td></tr>
     <tr><td>Policies</td><td>loaded by the gateway, hot-reloadable</td><td><code>openshell/policy-*.yaml</code> · <code>openshell policy set reachy-agent --policy &lt;file&gt; --wait</code></td></tr>
-    <tr><td>API key</td><td>provider <code>reachy-nvidia</code> in the gateway</td><td>profile <code>openshell/reachy-nvidia.yaml</code>; value only in <code>~/.bashrc</code></td></tr>
+    <tr><td>Model provider</td><td>provider <code>local-vllm</code> in the gateway (no key)</td><td>profile <code>openshell/local-vllm.yaml</code>; grants sandbox access to host:8001 only</td></tr>
     <tr><td>Robot daemon</td><td>background process, port 8000</td><td><code>start-daemon.sh</code> · <code>robot/logs/reachy-daemon.log</code> · package <code>reachy_mini.daemon</code></td></tr>
+    <tr><td>Ears</td><td>Silero VAD, host CPU (speech on/off only); Nemotron Omni does the actual listening</td><td><code>robot/listen.py</code> · <code>robot/models/silero_vad.onnx</code></td></tr>
+    <tr><td>Voice</td><td>Kokoro TTS inside the speaker service, host CPU, port 8042 <code>/say</code></td><td><code>robot/speaker.py</code> · <code>robot/models/kokoro-v1.0.onnx</code>, <code>voices-v1.0.bin</code></td></tr>
     <tr><td>Audit trail</td><td>gateway</td><td><code>openshell logs reachy-agent</code> (look for <code>NET:OPEN</code>, <code>HTTP:POST</code>, <code>DENIED</code>)</td></tr>
   </table>
   </div>
@@ -225,5 +369,8 @@
 ./talk.sh "Reachy, look up"          # -> policy_denied, robot still
 openshell policy set reachy-agent --policy openshell/policy-motion-enabled.yaml --wait
 ./talk.sh "Reachy, look up"          # -> completed, robot moves
-openshell logs reachy-agent | grep -E "DENIED|ALLOWED" | tail</pre>
+openshell logs reachy-agent | grep -E "DENIED|ALLOWED" | tail
+
+./voice.sh --once                    # press Enter, say it; Reachy moves and answers out loud
+robot/venv/bin/python robot/listen.py   # hands-free; unaddressed speech -> (not for me)</pre>
 </div>

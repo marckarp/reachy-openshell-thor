@@ -6,17 +6,24 @@ host.openshell.internal:8042 and may only call:
   GET  /sounds          list of allowed names
   POST /play {"name": "confused"}
 
-Only names in SOUNDS are accepted; there is no path, device, or volume parameter.
+The host (voice.sh) may also call, outside any policy:
+
+  POST /say  {"text": "Reachy has looked left."}    Kokoro TTS -> speaker
+
+Only names in SOUNDS are accepted by /play; there is no path, device, or volume parameter.
 Audio goes straight to the Reachy USB audio card over ALSA (the daemon's own audio
 path does not work on this host).
 """
 
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 
+import soundfile
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from kokoro_onnx import Kokoro
+from pydantic import BaseModel, Field
 
 import reachy_mini
 
@@ -35,12 +42,27 @@ SOUNDS = {
     "love": OURS / "love.wav",  # three-note "I love you" melody
 }
 
+MODELS = Path(__file__).parent / "models"
+VOICE = "af_sarah"
+
 app = FastAPI(title="Reachy speaker (trusted host service)")
 _lock = threading.Lock()
+_tts: Kokoro | None = None
+
+
+def tts() -> Kokoro:
+    global _tts
+    if _tts is None:
+        _tts = Kokoro(str(MODELS / "kokoro-v1.0.onnx"), str(MODELS / "voices-v1.0.bin"))
+    return _tts
 
 
 class PlayRequest(BaseModel):
     name: str
+
+
+class SayRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
 
 
 @app.get("/sounds")
@@ -62,3 +84,19 @@ def play(req: PlayRequest) -> dict:
     finally:
         _lock.release()
     return {"status": "played", "name": req.name}
+
+
+@app.post("/say")
+def say(req: SayRequest) -> dict:
+    if not _lock.acquire(blocking=False):
+        raise HTTPException(429, "a sound is already playing")
+    try:
+        samples, rate = tts().create(req.text, voice=VOICE, speed=1.0, lang="en-us")
+        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+            soundfile.write(wav.name, samples, rate)
+            subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, wav.name], check=True, timeout=30)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(502, f"speaker error: {type(exc).__name__}") from exc
+    finally:
+        _lock.release()
+    return {"status": "said", "chars": len(req.text)}

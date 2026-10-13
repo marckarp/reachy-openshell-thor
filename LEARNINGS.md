@@ -137,3 +137,13 @@ the native Reachy app and a speech adapter (hosted Parakeet + Magpie verified wo
     plays, so a trusted ALSA speaker service (`robot/speaker.py`) replaces it.
 19. **Local vLLM: turn thinking off for tool choices.** ~4 s with reasoning, ~1 s without, same
     tool call. `minimal_agent.py` passes `enable_thinking: false` when `CHAT_BASE_URL` is local.
+20. **Nemotron 3 Nano Omni already listens; `config.json` hides it.** The top-level config shows
+    only `vision_config`, which reads as "vision-only". The audio encoder (Parakeet + projection)
+    lives in the checkpoint's remote code (`configuration.py`, `processing.py`) and vLLM's
+    `nano_nemotron_vl.py` has `supports_audio`. Our stock `vllm serve` on :8001 accepted an
+    `input_audio` WAV with no flag changes and no `librosa` (pyav decodes it). So no separate
+    STT: `voice.sh` pipes the mic WAV into the sandbox and Omni emits `move_head` directly
+    (verified 2026-10-13). TTS still needs its own model; Kokoro via `/say` on `robot/speaker.py`.
+21. **`pkill -f <pattern>` kills the shell running it** when the pattern appears in that shell's own
+    command line. To restart the speaker service: `for p in $(pgrep -f "uvicorn speaker:app"); do
+    [ "$p" != "$$" ] && kill "$p"; done; robot/start-speaker.sh`.

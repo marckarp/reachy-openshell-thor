@@ -5,6 +5,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Downloaded model weights, ~340 MB (recreate: see BRINGUP.md "For voice")
+robot/models/
+
 # Runtime logs
 */logs/
 logs/

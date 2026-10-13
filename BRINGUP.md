@@ -8,6 +8,10 @@ OpenShell package installed, your user in the `docker` and `kvm` groups, the ude
 `/dev/kvm`, `NVIDIA_API_KEY` exported in `~/.bashrc`, and the `reachy-agent-minimal:latest`
 image built from `agent/Dockerfile`.
 
+For voice (step 6b) also once: `robot/venv/bin/pip install kokoro-onnx soundfile` and the two
+Kokoro files in `robot/models/` (`kokoro-v1.0.onnx`, `voices-v1.0.bin`, ~340 MB, from the
+`thewh1teagle/kokoro-onnx` GitHub release `model-files-v1.0`).
+
 ## 0. Make sure everything is down
 
 ```sh
@@ -99,6 +103,31 @@ swaps the real key in on the way out), gets back `move_head(["left"])`, turns th
 a fixed pose, and POSTs `/api/move/goto` to the daemon through the policy.
 Expect three lines: `[model chose]`, `[robot said] ... completed`, `[reply]`, and the head moves.
 If `[busy]` appears, the free endpoint was full and it switched to the fallback model.
+
+## 6b. Speak (needs the local vLLM from step 8)
+
+```sh
+./voice.sh --once          # press Enter, say "Reachy, look right"
+```
+
+What it does: records 4 s from the robot mic, base64-pipes the WAV into the sandbox, and the
+agent sends it to Nemotron 3 Nano Omni as audio. Omni does the listening itself (no whisper),
+emits the same `move_head` tool call, and the move crosses the same policy. The host speaks
+the `[reply]` line through `POST /say` on the speaker service (Kokoro TTS).
+Expect: the three lines from step 6, the head moves, and Reachy answers out loud.
+Check the boundary still holds: the sandbox gets 403 on `/say`:
+`openshell logs reachy-agent | grep "8042/say"` shows `DENIED`.
+
+Hands-free instead:
+
+```sh
+robot/venv/bin/python robot/listen.py
+```
+
+Say something unrelated: expect `heard 1.8 s -> asking Reachy` then `(not for me)`. Say
+"Reachy, look left": expect the tool call, the move, and the spoken reply. Needs
+`robot/models/silero_vad.onnx` (2 MB, from the `snakers4/silero-vad` repo,
+`src/silero_vad/data/silero_vad.onnx`).
 
 ## 7. Prove the boundary
 
