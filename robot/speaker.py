@@ -32,6 +32,7 @@ SOUNDS = {
     "count": ASSETS / "count.wav",
     "no": OURS / "no.wav",      # two low tones, "uh-uh"
     "yes": OURS / "yes.wav",    # short rising chirp, "mm-hm"
+    "love": OURS / "love.wav",  # three-note "I love you" melody
 }
 
 app = FastAPI(title="Reachy speaker (trusted host service)")

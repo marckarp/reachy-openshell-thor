@@ -4,7 +4,7 @@
 
 1. `SYSTEM_PROMPT` what the model is told.
 2. `TOOLS` the two functions it may call: `move_head(directions)` with an enum of five words,
-   and `play_sound(name)` with an enum of eight sounds (`yes`, `no`, six built-in). The prompt pairs
+   and `play_sound(name)` with an enum of nine sounds (`yes`, `no`, `love`, six built-in). The prompt pairs
    `no` with a head shake and `yes` with a nod.
 3. `POSES` Python's table from word to head angles. The model never sees numbers.
 4. `ask()` one chat-completions call to Nemotron on build.nvidia.com with the prompt, your

@@ -29,7 +29,7 @@ THINKING = os.getenv("CHAT_THINKING", "1" if "integrate.api.nvidia.com" in BASE_
 EXTRA = {} if THINKING else {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
 ROBOT = "http://host.openshell.internal:8000"    # the Reachy daemon, seen through OpenShell
 SPEAKER = "http://host.openshell.internal:8042"  # trusted speaker service (robot/speaker.py)
-SOUNDS = ["yes", "no", "confused", "impatient", "wake_up", "sleep", "dance", "count"]
+SOUNDS = ["yes", "no", "love", "confused", "impatient", "wake_up", "sleep", "dance", "count"]
 DENIED_SOUND = "confused"  # Reachy cannot talk yet, so it chirps when OpenShell says no
 
 # 1. What the model is told.
@@ -41,6 +41,8 @@ SYSTEM_PROMPT = (
     "and say so. End sequences with front unless the user asked to hold a pose. "
     "When the user asks Reachy to shake its head no, call play_sound with 'no' and then move_head; "
     "when asked to nod yes, call play_sound with 'yes' and then move_head. "
+    "When the user says I love you or asks Reachy to say it, call play_sound with 'love' and "
+    "then move_head up, front. "
     "Otherwise only call play_sound when the user asks for a sound or a mood like confused, "
     "impatient, wake up, sleep, dance, or count. If a tool result says policy_denied, say that "
     "OpenShell policy blocked the action and do not retry. Keep replies to one short sentence."

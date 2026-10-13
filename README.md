@@ -33,8 +33,8 @@ Then `./talk.sh`. Starting from nothing? Follow `BRINGUP.md`.
   USB serial port by itself, runs the 50 Hz motor loop, and serves `http://127.0.0.1:8000`.
 - `move_demo.py` moves the head with plain HTTP calls. No model, no OpenShell. Good for
   checking the hardware: `robot/venv/bin/python robot/move_demo.py`.
-- `speaker.py` + `start-speaker.sh`: tiny trusted service that plays one of eight named sounds
-  (six built-in Reachy sounds plus synthesized `yes` and `no` in `sounds/`) through the robot
+- `speaker.py` + `start-speaker.sh`: tiny trusted service that plays one of nine named sounds
+  (six built-in Reachy sounds plus synthesized `yes`, `no` and `love` in `sounds/`) through the robot
   speaker over ALSA. The daemon's own audio path does not work on this host.
   The sandbox reaches it as `host.openshell.internal:8042`; it accepts names only, never paths.
 - `usbreset.sh` fixes the Thor's internal USB hub when the robot vanishes from `lsusb`. Needs sudo.
