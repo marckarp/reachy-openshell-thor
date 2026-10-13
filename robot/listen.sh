@@ -14,6 +14,7 @@ running() { [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; }
 case "$1" in
   start)
     if running; then echo "already running (pid $(cat "$PID"))"; exit 0; fi
+    amixer -q -c Audio cset name='Headset Capture Volume' 50,50 2>/dev/null || true   # default 60 (0 dB) clips; this is -10 dB
     nohup venv/bin/python -u listen.py >> "$LOG" 2>&1 &
     echo $! > "$PID"
     echo "listener started (pid $!). Log: robot/listen.sh log" ;;
