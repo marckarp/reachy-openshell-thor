@@ -35,10 +35,13 @@ DENIED_SOUND = "confused"  # Reachy cannot talk yet, so it chirps when OpenShell
 # 1. What the model is told.
 SYSTEM_PROMPT = (
     "You control a Reachy Mini robot. Only call move_head when the user asks Reachy to look "
-    "left, right, up, down, or front. Only call play_sound when the user asks for a sound or a "
-    "mood like confused, impatient, wake up, sleep, dance, or count. If a tool result says "
-    "policy_denied, say that OpenShell policy blocked the action and do not retry. "
-    "Keep replies to one short sentence."
+    "left, right, up, down, or front. Directions are poses, so to repeat a motion N times "
+    "alternate with front: 'nod twice' is down, front, down, front; 'shake your head' is "
+    "left, right, left, right, front. Never send more than 8 poses; if asked for more, do 8 "
+    "and say so. End sequences with front unless the user asked to hold a pose. "
+    "Only call play_sound when the user asks for a sound or a mood like confused, impatient, "
+    "wake up, sleep, dance, or count. If a tool result says policy_denied, say that OpenShell "
+    "policy blocked the action and do not retry. Keep replies to one short sentence."
 )
 
 # 2. The only thing the model may choose. The enum is the entire robot vocabulary.
@@ -46,10 +49,15 @@ TOOLS = [{
     "type": "function",
     "function": {
         "name": "move_head",
-        "description": "Move Reachy's head through fixed directions, in order.",
+        "description": (
+            "Move Reachy's head through a sequence of fixed poses, in order, about one second each. "
+            "Each entry is a POSE, not a motion: 'down' means 'go to the down pose', so repeating "
+            "the same word does nothing visible. To nod or repeat a motion, alternate with 'front' "
+            "(e.g. down, front, down, front). At most 8 poses per call."
+        ),
         "parameters": {
             "type": "object",
-            "properties": {"directions": {"type": "array", "items": {
+            "properties": {"directions": {"type": "array", "minItems": 1, "maxItems": 8, "items": {
                 "type": "string", "enum": ["left", "right", "up", "down", "front"]}}},
             "required": ["directions"],
         },
@@ -87,6 +95,13 @@ def play_sound(name: str) -> dict:
 
 def move_head(directions: list[str]) -> dict:
     """Send one fixed goto per word. OpenShell allows or denies each POST."""
+    # Guardrails Python owns, whatever the model sends: drop back-to-back repeats of the
+    # same pose (they would just stall) and cap the sequence length.
+    cleaned: list[str] = []
+    for word in directions:
+        if not cleaned or cleaned[-1] != word:
+            cleaned.append(word)
+    directions = cleaned[:8]
     for word in directions:
         if word not in POSES:
             return {"status": "invalid_direction", "direction": word}
