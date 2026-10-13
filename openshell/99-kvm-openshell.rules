@@ -1,0 +1,3 @@
+# Let the OpenShell microVM driver (running as a normal user service) open KVM.
+# logind rewrites ACLs on /dev/kvm, so a plain setfacl does not persist.
+KERNEL=="kvm", GROUP="kvm", MODE="0666"

@@ -1,0 +1,11 @@
+[openshell]
+version = 2
+
+[openshell.gateway]
+# The stock Jetson kernel has no Landlock, so Docker sandboxes fail closed.
+# The microVM driver runs each sandbox in a KVM guest with its own kernel.
+compute_driver = "vm"
+
+[openshell.drivers.vm]
+vcpus = 2
+mem_mib = 2048

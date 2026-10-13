@@ -1,0 +1,82 @@
+version: 1
+
+# Model endpoint (integrate.api.nvidia.com) is granted by the reachy-nvidia provider,
+# so no model network policy is listed here.
+
+# Static sections are fixed when the sandbox is created.
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /lib64
+    - /proc
+    - /sys
+    - /etc
+    - /opt
+    - /var/log
+    - /dev/urandom
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+    - /home/sandbox
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+# Motion disabled: no allow rule for POST /api/move/goto, so OpenShell returns 403.
+network_policies:
+  reachy_rest:
+    name: reachy-rest-head-motion-enabled
+    endpoints:
+      - host: host.openshell.internal
+        port: 8000
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          - 127.0.0.1/32  # microVM driver maps host.openshell.internal to host loopback
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+        rules:
+          - allow:
+              method: GET
+              path: /api/daemon/status
+          - allow:
+              method: GET
+              path: /api/move/running
+          - allow:
+              method: POST
+              path: /api/move/stop
+    binaries:
+      - path: /opt/venv/bin/python
+      - path: /usr/local/bin/python3.12  # real target of the /opt/venv symlink
+
+  reachy_speaker:
+    name: reachy-speaker-named-sounds
+    endpoints:
+      - host: host.openshell.internal
+        port: 8042
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          - 127.0.0.1/32
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+        rules:
+          - allow:
+              method: GET
+              path: /sounds
+          - allow:
+              method: POST
+              path: /play
+    binaries:
+      - path: /opt/venv/bin/python
+      - path: /usr/local/bin/python3.12

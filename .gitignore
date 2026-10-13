@@ -1,0 +1,15 @@
+# Python environments (recreate: see robot/start-daemon.sh header and vllm/README.md)
+venv/
+*/venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime logs
+*/logs/
+logs/
+
+# Local tool state
+.claude/
+.app_metadata/
+*.swp

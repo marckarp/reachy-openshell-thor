@@ -1,0 +1,17 @@
+# Provider profile: the Thor's own vLLM server, reached from the sandbox as
+# host.openshell.internal:8001. No credential; the sandbox just needs permission to connect.
+# Import:  openshell profile import -f openshell/local-vllm.yaml
+# Create:  openshell provider create --name local-vllm --type local-vllm
+id: local-vllm
+display_name: Local vLLM on the Thor
+description: Nemotron 3 Nano Omni served by vllm/start-vllm.sh on port 8001
+category: inference
+inference_capable: true
+credentials: []
+endpoints:
+  - host: host.openshell.internal
+    port: 8001
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/opt/venv/bin/python, /opt/venv/bin/python3, /opt/venv/bin/python3.12, /usr/local/bin/python3.12]

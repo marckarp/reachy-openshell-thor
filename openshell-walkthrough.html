@@ -1,0 +1,229 @@
+<title>Reachy OpenShell Walkthrough</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column, a wide diagram band that may scroll sideways, then a numbered sequence and a file table. */
+  :root {
+    --bg: #f6f7f4;
+    --surface: #ffffff;
+    --fg: #1c211d;
+    --muted: #5b655d;
+    --line: #d5dad3;
+    --accent: #2f7a3e;      /* OpenShell / allowed */
+    --deny: #b3362b;        /* policy denied */
+    --model: #3d5a99;       /* model / cloud */
+    --robot: #8a5a1f;       /* hardware */
+    --sandbox: #e9efe6;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151916; --surface: #1d231e; --fg: #e8ece7; --muted: #a2ab a3; --muted: #a2aba3;
+      --line: #334036; --accent: #6fc27d; --deny: #ee7b6f; --model: #8fa8e6; --robot: #d9a25b; --sandbox: #22301f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151916; --surface: #1d231e; --fg: #e8ece7; --muted: #a2aba3;
+    --line: #334036; --accent: #6fc27d; --deny: #ee7b6f; --model: #8fa8e6; --robot: #d9a25b; --sandbox: #22301f;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.5; }
+  .wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; }
+  h1 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 600; margin: 0 0 .25rem; text-wrap: balance; letter-spacing: -.01em; }
+  h2 { font-size: 1.15rem; font-weight: 600; margin: 2.5rem 0 .75rem; }
+  p { max-width: 68ch; margin: .5rem 0; }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  code, .mono { font-family: var(--font-mono); font-size: .92em; }
+  code { background: var(--sandbox); padding: .05em .35em; border-radius: 3px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 22px; margin: .75rem 0 0; font-size: .9rem; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .diagram { overflow-x: auto; margin-top: 1rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  svg { display: block; min-width: 860px; width: 100%; height: auto; font-family: var(--font-body); }
+  svg text { fill: var(--fg); font-size: 13px; }
+  svg .t-muted { fill: var(--muted); font-size: 11.5px; }
+  svg .t-mono { font-family: var(--font-mono); font-size: 11px; }
+  svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+  svg .box-sandbox { fill: var(--sandbox); stroke: var(--accent); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  svg .box-gate { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+  svg .box-model { stroke: var(--model); stroke-width: 1.6; }
+  svg .box-robot { stroke: var(--robot); stroke-width: 1.6; }
+  svg .arrow { stroke: var(--fg); stroke-width: 1.4; fill: none; marker-end: url(#head); }
+  svg .arrow-model { stroke: var(--model); marker-end: url(#head-model); }
+  svg .arrow-deny { stroke: var(--deny); stroke-dasharray: 4 3; marker-end: url(#head-deny); }
+  svg .arrow-ok { stroke: var(--accent); marker-end: url(#head-ok); }
+  svg .lbl { font-size: 11.5px; fill: var(--muted); }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; max-width: 72ch; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2.2rem 1fr; gap: .25rem .75rem; padding: .7rem 0; border-top: 1px solid var(--line); }
+  ol.steps li::before { content: counter(s); font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
+  ol.steps li strong { font-weight: 600; }
+  ol.steps li .file { grid-column: 2; color: var(--muted); font-size: .88rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: .5rem; }
+  th, td { text-align: left; vertical-align: top; padding: .55rem .6rem; border-top: 1px solid var(--line); }
+  th { font-weight: 600; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
+  td:first-child { white-space: nowrap; font-weight: 500; }
+  .tablewrap { overflow-x: auto; }
+  .note { border-left: 3px solid var(--accent); padding: .4rem .9rem; background: var(--surface); margin: 1rem 0; max-width: 72ch; }
+  .deny { color: var(--deny); font-weight: 500; }
+  .ok { color: var(--accent); font-weight: 500; }
+  @media (max-width: 600px) { ol.steps li { grid-template-columns: 1.6rem 1fr; } }
+  @media (prefers-reduced-motion: no-preference) { .diagram { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <h1>How OpenShell controls Reachy on the Thor</h1>
+  <p class="lede">What happens between typing "Reachy, look up" and the motors moving, which process does each step, and which file to open to see it.</p>
+
+  <h2>The path of one request</h2>
+  <p>Everything runs on the Jetson Thor except the model. Dashed green is the sandbox boundary. Nothing inside it can reach the network, the robot, or the API key except through the OpenShell gateway.</p>
+  <div class="legend">
+    <span style="--c: var(--accent)">OpenShell</span>
+    <span style="--c: var(--model)">Model on build.nvidia.com</span>
+    <span style="--c: var(--robot)">Robot hardware</span>
+    <span style="--c: var(--deny)">Blocked by policy</span>
+  </div>
+
+  <div class="diagram">
+  <svg viewBox="0 0 960 470" role="img" aria-label="Request flow from the terminal through the OpenShell sandbox, policy, daemon, and motors">
+    <defs>
+      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="var(--fg)"/></marker>
+      <marker id="head-model" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="var(--model)"/></marker>
+      <marker id="head-deny" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="var(--deny)"/></marker>
+      <marker id="head-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="var(--accent)"/></marker>
+    </defs>
+
+    <!-- You -->
+    <rect class="box" x="20" y="150" width="130" height="70" rx="4"/>
+    <text x="85" y="178" text-anchor="middle" font-weight="600">You</text>
+    <text x="85" y="198" text-anchor="middle" class="t-mono">./talk.sh</text>
+
+    <!-- Sandbox boundary -->
+    <rect class="box-sandbox" x="190" y="40" width="330" height="300" rx="8"/>
+    <text x="205" y="62" class="t-muted">OpenShell sandbox "reachy-agent"  (KVM microVM, no network card)</text>
+
+    <!-- Agent -->
+    <rect class="box" x="215" y="135" width="280" height="100" rx="4"/>
+    <text x="355" y="158" text-anchor="middle" font-weight="600">Conversation agent</text>
+    <text x="355" y="178" text-anchor="middle" class="t-muted">system prompt + 1 tool schema</text>
+    <text x="355" y="196" text-anchor="middle" class="t-muted">move_head(directions)</text>
+    <text x="355" y="220" text-anchor="middle" class="t-mono">agent/minimal_agent.py</text>
+
+    <!-- env -->
+    <rect class="box" x="215" y="270" width="280" height="50" rx="4"/>
+    <text x="355" y="290" text-anchor="middle" class="t-muted">key arrives as a placeholder token</text>
+    <text x="355" y="308" text-anchor="middle" class="t-mono">NVIDIA_API_KEY=&lt;opaque&gt;</text>
+
+    <!-- Gateway -->
+    <rect class="box box-gate" x="590" y="40" width="150" height="300" rx="6"/>
+    <text x="665" y="66" text-anchor="middle" font-weight="600">OpenShell gateway</text>
+    <text x="665" y="84" text-anchor="middle" class="t-muted">127.0.0.1:17670</text>
+    <text x="665" y="118" text-anchor="middle" class="t-muted">policy check</text>
+    <text x="665" y="134" text-anchor="middle" class="t-mono">binary · host · port</text>
+    <text x="665" y="148" text-anchor="middle" class="t-mono">method · path</text>
+    <text x="665" y="190" text-anchor="middle" class="t-muted">provider proxy</text>
+    <text x="665" y="206" text-anchor="middle" class="t-mono">swaps real key in,</text>
+    <text x="665" y="220" text-anchor="middle" class="t-mono">only for this host</text>
+    <text x="665" y="262" text-anchor="middle" class="t-muted">audit log</text>
+    <text x="665" y="278" text-anchor="middle" class="t-mono">openshell logs</text>
+    <text x="665" y="310" text-anchor="middle" class="t-mono">policy-*.yaml</text>
+
+    <!-- Model -->
+    <rect class="box box-model" x="800" y="60" width="140" height="80" rx="4"/>
+    <text x="870" y="85" text-anchor="middle" font-weight="600">Nemotron 3</text>
+    <text x="870" y="103" text-anchor="middle" class="t-muted">Nano Omni</text>
+    <text x="870" y="124" text-anchor="middle" class="t-mono">integrate.api.nvidia.com</text>
+
+    <!-- Daemon -->
+    <rect class="box box-robot" x="800" y="200" width="140" height="80" rx="4"/>
+    <text x="870" y="225" text-anchor="middle" font-weight="600">Reachy daemon</text>
+    <text x="870" y="243" text-anchor="middle" class="t-muted">host.openshell.internal</text>
+    <text x="870" y="263" text-anchor="middle" class="t-mono">POST /api/move/goto</text>
+
+    <!-- Motors -->
+    <rect class="box box-robot" x="800" y="330" width="140" height="60" rx="4"/>
+    <text x="870" y="354" text-anchor="middle" font-weight="600">Head motors</text>
+    <text x="870" y="374" text-anchor="middle" class="t-mono">/dev/ttyACM0 · 50 Hz</text>
+
+    <!-- Arrows -->
+    <!-- you -> agent -->
+    <path class="arrow" d="M150 185 H213"/>
+    <text x="181" y="178" text-anchor="middle" class="lbl">sentence</text>
+
+    <!-- agent -> gateway -> model (top lane) -->
+    <path class="arrow arrow-model" d="M495 160 H588"/>
+    <path class="arrow arrow-model" d="M740 100 H798"/>
+    <text x="540" y="152" text-anchor="middle" class="lbl">prompt + tools</text>
+    <!-- model -> back -->
+    <path class="arrow arrow-model" d="M800 120 H742"/>
+    <text x="770" y="135" text-anchor="middle" class="lbl">tool call</text>
+
+    <!-- agent -> gateway (motion lane) -->
+    <path class="arrow" d="M495 210 H588"/>
+    <text x="540" y="226" text-anchor="middle" class="lbl">goto request</text>
+
+    <!-- gateway -> daemon allowed -->
+    <path class="arrow arrow-ok" d="M740 240 H798"/>
+    <text x="770" y="232" text-anchor="middle" class="lbl">allowed</text>
+    <!-- gateway -> denied back -->
+    <path class="arrow arrow-deny" d="M590 300 H497"/>
+    <text x="543" y="315" text-anchor="middle" class="lbl">403 policy_denied</text>
+
+    <!-- daemon -> motors -->
+    <path class="arrow" d="M870 280 V328"/>
+
+    <!-- bottom caption -->
+    <text x="20" y="420" class="t-muted">Two policies, one line of difference:</text>
+    <text x="20" y="440" class="t-mono">policy-motion-disabled.yaml   → goto is </text>
+    <text x="372" y="440" class="t-mono" fill="var(--deny)" font-weight="500">denied</text>
+    <text x="20" y="458" class="t-mono">policy-motion-enabled.yaml    → goto is </text>
+    <text x="372" y="458" class="t-mono" fill="var(--accent)" font-weight="500">allowed</text>
+  </svg>
+  </div>
+
+  <h2>Step by step</h2>
+  <p>Paths below are relative to <code>~/Desktop/mkarp</code>.</p>
+  <ol class="steps">
+    <li><strong>You type a sentence.</strong> <code>talk.sh</code> runs <code>openshell sandbox exec</code>, which relays the command into the VM and runs the test entry point there.
+      <span class="file">talk.sh · agent/minimal_agent.py (copied to /sandbox/minimal_agent.py)</span></li>
+    <li><strong>The agent builds the request.</strong> It loads the 13-line system prompt, attaches the three tool schemas, and appends your sentence.
+      <span class="file">agent/minimal_agent.py: <code>SYSTEM_PROMPT</code> and <code>TOOLS</code></span></li>
+    <li><strong>The request leaves the sandbox toward the model.</strong> OpenShell checks the calling binary and destination, then the provider proxy replaces the placeholder key with your real NVIDIA key. The key never exists inside the VM.
+      <span class="file">openshell/reachy-nvidia.yaml · <code>openshell provider get reachy-nvidia</code></span></li>
+    <li><strong>The model answers with a tool call,</strong> for example <code>move_head(directions=["up"])</code>. The schema's enum means it can only ever say one of five words.
+      <span class="file">agent/minimal_agent.py: <code>ask()</code></span></li>
+    <li><strong>Python turns the word into a fixed pose.</strong> "up" becomes pitch -30°, yaw 0°, one second, minjerk. It sends <code>POST /api/move/goto</code> to <code>host.openshell.internal:8000</code>.
+      <span class="file">agent/minimal_agent.py: <code>POSES</code> and <code>move_head()</code></span></li>
+    <li><strong>OpenShell decides.</strong> The active policy either has an allow rule for that method and path or it does not. <span class="deny">Denied</span> returns a 403 with a readable reason. <span class="ok">Allowed</span> forwards the request to the daemon on the host.
+      <span class="file">openshell/policy-*.yaml · <code>openshell logs reachy-agent</code> shows ALLOWED / DENIED lines</span></li>
+    <li><strong>The daemon moves the head.</strong> It solves the six motor angles, runs a 50 Hz control loop, and writes servo packets over USB serial.
+      <span class="file">robot/venv/lib/python3.12/site-packages/reachy_mini/daemon/app/routers/move.py · start-daemon.sh</span></li>
+    <li><strong>The result goes back to the model,</strong> which writes the reply you see: "Nod completed" or "OpenShell policy blocked the request". It does not retry a denial.
+      <span class="file">agent/minimal_agent.py: end of <code>main()</code></span></li>
+  </ol>
+
+  <div class="note">
+    <p><strong>Why the split matters.</strong> The model handles fuzzy language but can only emit one of five words. Python owns the numbers. OpenShell owns the yes/no on the endpoint. No prompt injection can turn "look up" into a raw motor command, because the sandbox has no path to <code>/api/move/set_target</code> or the motor routes at all.</p>
+  </div>
+
+  <h2>Where each piece lives</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Piece</th><th>Runs as</th><th>Config and code</th></tr>
+    <tr><td>Gateway</td><td>systemd user service <code>openshell-gateway</code>, port 17670</td><td><code>~/.config/openshell/gateway.toml</code> (microVM driver, copy in <code>openshell/</code>)</td></tr>
+    <tr><td>Sandbox</td><td>KVM VM named <code>reachy-agent</code></td><td><code>openshell sandbox get reachy-agent</code> · shell in with <code>openshell sandbox exec --name reachy-agent -- sh</code></td></tr>
+    <tr><td>Agent code</td><td>inside the VM at <code>/opt/venv</code></td><td>built from <code>agent/Dockerfile</code>; image <code>reachy-agent-minimal:latest</code></td></tr>
+    <tr><td>Policies</td><td>loaded by the gateway, hot-reloadable</td><td><code>openshell/policy-*.yaml</code> · <code>openshell policy set reachy-agent --policy &lt;file&gt; --wait</code></td></tr>
+    <tr><td>API key</td><td>provider <code>reachy-nvidia</code> in the gateway</td><td>profile <code>openshell/reachy-nvidia.yaml</code>; value only in <code>~/.bashrc</code></td></tr>
+    <tr><td>Robot daemon</td><td>background process, port 8000</td><td><code>start-daemon.sh</code> · <code>robot/logs/reachy-daemon.log</code> · package <code>reachy_mini.daemon</code></td></tr>
+    <tr><td>Audit trail</td><td>gateway</td><td><code>openshell logs reachy-agent</code> (look for <code>NET:OPEN</code>, <code>HTTP:POST</code>, <code>DENIED</code>)</td></tr>
+  </table>
+  </div>
+
+  <h2>Try it</h2>
+  <p>Deny, then allow, same sentence:</p>
+  <pre class="mono" style="overflow-x:auto; background: var(--surface); border:1px solid var(--line); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; line-height:1.55;">openshell policy set reachy-agent --policy openshell/policy-motion-disabled.yaml --wait
+./talk.sh "Reachy, look up"          # -> policy_denied, robot still
+openshell policy set reachy-agent --policy openshell/policy-motion-enabled.yaml --wait
+./talk.sh "Reachy, look up"          # -> completed, robot moves
+openshell logs reachy-agent | grep -E "DENIED|ALLOWED" | tail</pre>
+</div>
