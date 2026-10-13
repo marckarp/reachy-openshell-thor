@@ -18,16 +18,64 @@ mkarp/
   openshell-walkthrough.html   diagram of one request end to end
 ```
 
-## Three things must be running
+## Setup (first time on a machine)
+
+Done once; after that only the "must be running" table below matters. Every step has detail
+and checks in `BRINGUP.md` and `openshell/SETUP.md`.
+
+**Hardware.** Jetson Thor (JetPack 7 / L4T R38, aarch64), Reachy Mini Lite on a **USB-A** port
+(the Thor's USB-C is device-mode only), robot on its own power adapter.
+
+1. **Host packages**
+   ```sh
+   sudo apt install -y python3.12-venv python3-dev alsa-utils sox docker.io
+   sudo usermod -aG dialout,docker,kvm $USER        # serial port, images, microVMs; re-login after
+   ```
+2. **Robot venv** (daemon, speaker service, listener)
+   ```sh
+   python3 -m venv robot/venv
+   robot/venv/bin/pip install reachy-mini fastapi uvicorn httpx kokoro-onnx soundfile onnxruntime
+   ```
+3. **Voice models** into `robot/models/` (git-ignored, ~340 MB)
+   - `kokoro-v1.0.onnx`, `voices-v1.0.bin` from GitHub `thewh1teagle/kokoro-onnx`, release `model-files-v1.0`
+   - `silero_vad.onnx` from GitHub `snakers4/silero-vad`, path `src/silero_vad/data/silero_vad.onnx`
+4. **OpenShell** (`openshell/SETUP.md` steps 1 to 5): install script, `gateway.toml` with the KVM
+   microVM driver, the `/dev/kvm` udev rule, start + register the gateway.
+   ```sh
+   curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sudo sh
+   cp openshell/gateway.toml ~/.config/openshell/gateway.toml
+   sudo cp openshell/99-kvm-openshell.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
+   systemctl --user enable --now openshell-gateway && sudo loginctl enable-linger $USER
+   openshell gateway add https://127.0.0.1:17670 --local --name openshell
+   ```
+5. **Model on the Thor** (`vllm/README.md`): `vllm/start-vllm.sh` pulls the vLLM image and
+   ~21 GB of Nemotron 3 Nano Omni weights on first run, then serves on :8001.
+   ```sh
+   openshell profile import -f openshell/local-vllm.yaml
+   openshell provider create --name local-vllm --type local-vllm
+   ```
+   (Cloud alternative: `reachy-nvidia` provider with `NVIDIA_API_KEY` in `~/.bashrc`, see `BRINGUP.md` step 4.)
+6. **Sandbox image and sandbox** (`agent/README.md`)
+   ```sh
+   cd agent && docker buildx build --load --tag reachy-agent-minimal:latest --file Dockerfile . && cd ..
+   openshell sandbox create --name reachy-agent --from reachy-agent-minimal:latest \
+     --policy openshell/policy-motion-enabled.yaml --provider local-vllm \
+     --env CHAT_BASE_URL=http://host.openshell.internal:8001/v1 --detach --no-tty
+   ```
+
+Nothing in this repo holds a credential; the only secret (`NVIDIA_API_KEY`, cloud path only)
+lives in `~/.bashrc` and inside the gateway's encrypted store.
+
+## Four things must be running
 
 | What | Start it | Check it |
 |---|---|---|
 | Robot daemon (owns the USB motors, REST on :8000) | `robot/start-daemon.sh` | `curl -s 127.0.0.1:8000/api/daemon/status` |
-| Speaker service (plays 6 named sounds on :8042) | `robot/start-speaker.sh` | `curl -s 127.0.0.1:8042/sounds` |
-| OpenShell gateway (user service, port 17670) | starts at login; `systemctl --user restart openshell-gateway` | `openshell status` |
-| Sandbox `reachy-agent` (a small VM holding the agent) | already created; `openshell sandbox get reachy-agent` should say `Ready` | same |
+| Speaker service (named sounds + `/say` TTS on :8042) | `robot/start-speaker.sh` | `curl -s 127.0.0.1:8042/sounds` |
+| vLLM with Nemotron Omni (:8001) | `vllm/start-vllm.sh` (2–4 min to load) | `curl -s 127.0.0.1:8001/v1/models` |
+| OpenShell gateway (user service, port 17670) + sandbox `reachy-agent` | gateway starts at login; `openshell sandbox start reachy-agent` if Stopped | `openshell status` · `openshell sandbox get reachy-agent` says `Ready` |
 
-Then `./talk.sh`. Starting from nothing? Follow `BRINGUP.md`.
+Then `./talk.sh`, or `robot/listen.sh start` to talk out loud. Starting from nothing? Follow `BRINGUP.md`.
 
 ## robot/  — the robot alone
 
