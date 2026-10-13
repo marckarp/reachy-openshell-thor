@@ -107,7 +107,7 @@ def move_head(directions: list[str]) -> dict:
             return {"status": "invalid_direction", "direction": word}
         pitch, yaw = POSES[word]
         body = {"head_pose": {"x": 0, "y": 0, "z": 0, "roll": 0, "pitch": pitch, "yaw": yaw},
-                "duration": 1.0, "interpolation": "minjerk"}
+                "duration": 1.2, "interpolation": "minjerk"}
         r = httpx.post(f"{ROBOT}/api/move/goto", json=body, timeout=5)
         if r.status_code == 403:
             try:
@@ -117,8 +117,14 @@ def move_head(directions: list[str]) -> dict:
             return {"status": "policy_denied", "direction": word, "detail": r.json().get("detail", "")}
         r.raise_for_status()
         move_id = r.json()["uuid"]
-        while move_id in httpx.get(f"{ROBOT}/api/move/running", timeout=5).json():
-            time.sleep(0.1)
+        # Wait for THIS move to finish before sending the next pose. The daemon reports
+        # running moves as a list of {"uuid": ...} objects.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            running = httpx.get(f"{ROBOT}/api/move/running", timeout=5).json()
+            if not any(m.get("uuid") == move_id for m in running):
+                break
+            time.sleep(0.05)
     return {"status": "completed", "directions": directions}
 
 

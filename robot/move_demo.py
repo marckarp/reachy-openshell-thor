@@ -48,9 +48,10 @@ def look(direction: str, duration: float = 1.0) -> None:
         },
     )
     print(f"look {direction:5s} -> move {move['uuid']}")
-    # Wait until the daemon reports that move as finished.
-    while move["uuid"] in get("/api/move/running"):
-        time.sleep(0.1)
+    # Wait until the daemon reports that move as finished. The running list holds
+    # objects like {"uuid": "..."}, not bare strings.
+    while any(m.get("uuid") == move["uuid"] for m in get("/api/move/running")):
+        time.sleep(0.05)
 
 
 if __name__ == "__main__":
