@@ -144,6 +144,15 @@ the native Reachy app and a speech adapter (hosted Parakeet + Magpie verified wo
     `input_audio` WAV with no flag changes and no `librosa` (pyav decodes it). So no separate
     STT: `voice.sh` pipes the mic WAV into the sandbox and Omni emits `move_head` directly
     (verified 2026-10-13). TTS still needs its own model; Kokoro via `/say` on `robot/speaker.py`.
-21. **`pkill -f <pattern>` kills the shell running it** when the pattern appears in that shell's own
+21. **The daemon does not reject out-of-range poses.** `POST /api/move/goto` with pitch 1.5 rad
+    and z 0.1 m returned a uuid, no error. When the model is allowed to send numbers
+    (`perform` tool, 2026-10-13), Python's clamp in `to_goto()` is the only guard before the IK.
+22. **Omni calls a tool once per step unless told otherwise.** Asked to dance, it issued three
+    one-step `perform` calls. One prompt sentence, "put the whole motion in ONE perform call",
+    fixed it: one call, 8 steps.
+23. **`/play` must return before the sound ends** or the dance starts after the music. The
+    speaker service plays sounds in a thread; `/say` stays blocking (so `listen.py` knows when
+    to reopen the mic) and waits up to 20 s for a playing sound instead of answering 429.
+24. **`pkill -f <pattern>` kills the shell running it** when the pattern appears in that shell's own
     command line. To restart the speaker service: `for p in $(pgrep -f "uvicorn speaker:app"); do
     [ "$p" != "$$" ] && kill "$p"; done; robot/start-speaker.sh`.

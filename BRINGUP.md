@@ -89,7 +89,7 @@ What it does: converts the image into a VM root disk (first time only, ~30 s), b
 applies the policy, attaches the provider. The agent file is already inside the image at
 `/sandbox/minimal_agent.py`. The VM has no network card: every connection goes through the
 gateway's policy check.
-Expect: `Phase: Ready`. The policy shows four allowed paths under port 8000.
+Expect: `Phase: Ready`. The policy shows four allowed paths under port 8000 and three under 8042.
 
 ## 6. Talk
 
@@ -98,11 +98,12 @@ Expect: `Phase: Ready`. The policy shows four allowed paths under port 8000.
 ```
 
 What it does: runs `/sandbox/minimal_agent.py` inside the sandbox with your sentence.
-The agent sends the prompt + the one tool to Nemotron on build.nvidia.com (the gateway
-swaps the real key in on the way out), gets back `move_head(["left"])`, turns the word into
-a fixed pose, and POSTs `/api/move/goto` to the daemon through the policy.
-Expect three lines: `[model chose]`, `[robot said] ... completed`, `[reply]`, and the head moves.
-If `[busy]` appears, the free endpoint was full and it switched to the fallback model.
+The agent sends the prompt + three tools to Nemotron through the gateway, gets back
+`perform([{"yaw": 40}])`, clamps and converts it, and POSTs `/api/move/goto` to the daemon
+through the policy.
+Expect three lines: `[model chose] perform({'steps': '1 steps'})`, `[robot said] ... completed`,
+`[reply]`, and the head moves. Then try `./talk.sh "Reachy, do a little dance"`: the dance tune
+starts and one `perform` of 8 to 12 steps follows.
 
 ## 6b. Speak (needs the local vLLM from step 8)
 
@@ -142,7 +143,8 @@ What it does: hot-swaps to the policy that lacks the `goto` allow rule. Same sen
 model, same tool call, but the gateway answers 403 and the robot stays still. The log is the
 gateway's own record. The last line restores motion.
 Expect: the confused chirp from the speaker, `[robot said] ... policy_denied`, reply says OpenShell
-blocked it, log shows `DENIED`. (The chirp is allowed in both policies; the move is not.)
+blocked it, log shows `DENIED`. (Sounds and speech are allowed in both policies; the move is not,
+so `./talk.sh "Reachy, say hello out loud"` still talks under the locked policy.)
 
 ## 8. Optional: run the model on the Thor instead of build.nvidia.com
 

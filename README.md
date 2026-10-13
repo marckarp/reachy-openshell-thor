@@ -87,8 +87,9 @@ Then `./talk.sh`, or `robot/listen.sh start` to talk out loud. Starting from not
   (six built-in Reachy sounds plus synthesized `yes`, `no` and `love` in `sounds/`) through the robot
   speaker over ALSA. The daemon's own audio path does not work on this host.
   The sandbox reaches it as `host.openshell.internal:8042`; it accepts names only, never paths.
-  It also has `POST /say {"text": ...}` (Kokoro TTS, weights in `robot/models/`) which only the
-  host may call: the policy allows the sandbox `POST /play` and nothing else on 8042.
+  It also has `POST /say {"text": ...}` (Kokoro TTS, weights in `robot/models/`), used by the
+  host to speak replies and by the agent's `speak` tool. `/play` returns at once so the robot can
+  dance while the tune plays; `/say` blocks until spoken, so `listen.py` knows when to reopen the mic.
 - `usbreset.sh` fixes the Thor's internal USB hub when the robot vanishes from `lsusb`. Needs sudo.
 - `logs/reachy-daemon.log` daemon log.
 
@@ -96,7 +97,8 @@ Then `./talk.sh`, or `robot/listen.sh start` to talk out loud. Starting from not
 
 - `policy-motion-enabled.yaml` lets the sandbox call `POST /api/move/goto` (robot moves).
 - `policy-motion-disabled.yaml` same file without that one rule (robot refuses with a 403).
-  Both allow the speaker service (`POST /play` on 8042), so Reachy can always chirp.
+  Both allow the speaker service (`POST /play` and `POST /say` on 8042), so Reachy can always
+  chirp and talk, including to tell you a move was blocked.
   Switch live: `openshell policy set reachy-agent --policy openshell/<file> --wait`
 - `reachy-nvidia.yaml` provider profile. The gateway holds your NVIDIA API key and injects it
   only into requests to integrate.api.nvidia.com. The sandbox never sees the real key.
@@ -107,11 +109,18 @@ Then `./talk.sh`, or `robot/listen.sh start` to talk out loud. Starting from not
 
 ## agent/  — the brain inside the sandbox
 
-`agent/minimal_agent.py` is the whole agent, about 130 lines, numbered 1 to 5 inside:
-system prompt, two tools (`move_head`, `play_sound`), the word-to-angle table, the call to
-Nemotron, and the HTTP requests to the robot and the speaker. When OpenShell denies a move,
-the agent plays the confused chirp so the refusal is audible. Model: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
-(fallback `nemotron-3-super-120b-a12b`). SDK: the plain `openai` client.
+`agent/minimal_agent.py` is the whole agent, numbered 1 to 4 inside: a system prompt that
+describes the body and its safe ranges, three tools (`perform(steps)`, `speak(text)`,
+`play_sound(name)`), Python's clamp from the model's degrees to the daemon's radians, and the
+HTTP requests to the robot and the speaker. "Dance" is the model composing 8 to 12 poses; "sing"
+is it writing lines for `speak`. Every number is clamped (pitch ±30°, yaw ±45°, roll ±25°,
+z ±20 mm, antennas ±90°, body ±90°, ≤16 steps, ≤30 s) because the daemon itself does not reject
+out-of-range poses. When OpenShell denies a move, the agent plays the confused chirp and says so.
+Model: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`. SDK: the plain `openai` client.
+
+Trade-off, stated plainly: the first version let the model say only five words and Python owned
+every number. Now the model owns the numbers inside an envelope. OpenShell still decides *whether*
+the sandbox may move the robot; Python decides *how far*. See `agent/README.md`.
 
 `agent/Dockerfile` builds the sandbox image (Python + openai + httpx + that file).
 After editing the agent, push it into the running sandbox without a rebuild:
@@ -200,9 +209,10 @@ steps to point the sandbox at it (provider `local-vllm`, env `CHAT_BASE_URL`).
 
 ## How one request flows
 
-you -> talk.sh -> sandbox agent -> (OpenShell proxy adds key) -> Nemotron on build.nvidia.com
-    -> tool call move_head(["left"]) -> Python maps to a fixed pose -> POST /api/move/goto
+you -> talk.sh / listen.py -> sandbox agent -> OpenShell -> Nemotron Omni on vLLM :8001
+    -> tool call perform([{yaw: 40}]) -> Python clamps, converts to radians -> POST /api/move/goto
     -> OpenShell policy allow/deny -> Reachy daemon -> USB serial -> motors
+    -> speak("...") -> OpenShell -> /say on the host -> Kokoro -> robot speaker
 
 Open `openshell-walkthrough.html` for the picture.
 

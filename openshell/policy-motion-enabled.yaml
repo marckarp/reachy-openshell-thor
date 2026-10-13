@@ -81,6 +81,9 @@ network_policies:
           - allow:
               method: POST
               path: /play
+          - allow:
+              method: POST
+              path: /say
     binaries:
       - path: /opt/venv/bin/python
       - path: /usr/local/bin/python3.12

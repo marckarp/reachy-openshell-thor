@@ -21,6 +21,7 @@ turn() {
     | grep -E '^\[(model chose|robot said|reply|busy)\]|Error')
   printf '%s\n' "$out"
   reply=$(printf '%s\n' "$out" | sed -n 's/^\[reply\] *//p')
+  printf '%s\n' "$out" | grep -q '^\[model chose\] speak(' && reply=""   # already spoken by the tool
   [ -n "$reply" ] && printf '%s' "$reply" \
     | python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()}))' \
     | curl -s -X POST 127.0.0.1:8042/say -H 'content-type: application/json' -d @- >/dev/null

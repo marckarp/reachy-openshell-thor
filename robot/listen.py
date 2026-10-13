@@ -102,16 +102,18 @@ def turn(pcm: np.ndarray) -> None:
     print(f"heard {len(pcm) / RATE:.1f} s -> asking Reachy")
     b64 = base64.b64encode(to_wav(pcm)).decode()
     res = subprocess.run(AGENT, input=b64, capture_output=True, text=True, timeout=120)
-    reply = ""
+    reply, already_spoke = "", False
     for line in (res.stdout + res.stderr).splitlines():
         if line.startswith(("[model chose]", "[robot said]", "[reply]", "[busy]")) or "Error" in line:
             print("  " + line)
+        if line.startswith("[model chose] speak("):
+            already_spoke = True
         if line.startswith("[reply]"):
             reply = line[len("[reply]"):].strip()
     if not reply or reply.upper().lstrip("\"'").startswith("IGNORE"):
         print("  (not for me)")
         return
-    if reply.startswith("(") and reply.endswith(")"):   # "(done)", "(No additional response)"
+    if already_spoke or (reply.startswith("(") and reply.endswith(")")):   # spoke via tool, or "(done)"
         return
     try:
         httpx.post(f"{SPEAKER}/say", json={"text": reply[:300]}, timeout=60)

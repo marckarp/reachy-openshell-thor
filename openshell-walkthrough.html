@@ -107,8 +107,8 @@
     <!-- Agent -->
     <rect class="box" x="215" y="135" width="280" height="100" rx="4"/>
     <text x="355" y="158" text-anchor="middle" font-weight="600">Conversation agent</text>
-    <text x="355" y="178" text-anchor="middle" class="t-muted">system prompt + 1 tool schema</text>
-    <text x="355" y="196" text-anchor="middle" class="t-muted">move_head(directions)</text>
+    <text x="355" y="178" text-anchor="middle" class="t-muted">body ranges + 3 tool schemas</text>
+    <text x="355" y="196" text-anchor="middle" class="t-mono">perform · speak · play_sound</text>
     <text x="355" y="220" text-anchor="middle" class="t-mono">agent/minimal_agent.py</text>
 
     <!-- env -->
@@ -188,21 +188,21 @@
   <ol class="steps">
     <li><div class="body"><strong>You type or speak.</strong> <code>talk.sh</code> passes a sentence; <code>voice.sh</code> and <code>robot/listen.py</code> record the robot mic and base64-pipe a WAV on stdin. Either way <code>openshell sandbox exec</code> relays it into the VM. <code>listen.py</code> keeps the mic open and uses Silero VAD (host CPU) to cut one WAV per utterance.
       <span class="file">talk.sh · voice.sh · robot/listen.py · agent/minimal_agent.py (copied to /sandbox/minimal_agent.py)</span></div></li>
-    <li><div class="body"><strong>The agent builds the request.</strong> It loads the system prompt, attaches the two tool schemas, and appends your sentence, or an <code>input_audio</code> part holding the WAV. Omni has an audio encoder, so no separate speech-to-text model exists anywhere. In audio mode the prompt adds: if not addressed as Reachy, reply <code>IGNORE</code>.
+    <li><div class="body"><strong>The agent builds the request.</strong> The system prompt describes the body and its safe ranges (pitch ±30°, yaw ±45°, roll ±25°, z ±20 mm, antennas ±90°, body ±90°). It attaches three tool schemas, <code>perform(steps)</code>, <code>speak(text)</code>, <code>play_sound(name)</code>, and appends your sentence, or an <code>input_audio</code> part holding the WAV. Omni has an audio encoder, so no separate speech-to-text model exists anywhere. In audio mode the prompt adds: if not addressed as Reachy, reply <code>IGNORE</code>.
       <span class="file">agent/minimal_agent.py: <code>SYSTEM_PROMPT</code>, <code>AUDIO_PROMPT</code>, <code>TOOLS</code>, <code>user_message()</code></span></div></li>
     <li><div class="body"><strong>The request leaves the sandbox toward the model.</strong> OpenShell checks the calling binary and destination. The <code>local-vllm</code> provider has no API key — it only grants the sandbox permission to reach port 8001 on the host where vLLM is running.
       <span class="file">openshell/local-vllm.yaml · <code>openshell provider get local-vllm</code></span></div></li>
-    <li><div class="body"><strong>The model answers with a tool call,</strong> for example <code>move_head(directions=["up"])</code>. The schema's enum means it can only ever say one of five words.
+    <li><div class="body"><strong>The model answers with a tool call,</strong> for example <code>perform(steps=[{pitch: -25}])</code> for "look up", or for "dance": <code>play_sound("dance")</code> then one <code>perform</code> with 8 to 12 steps it composed, each with yaw, roll, antennas, body_yaw and a duration.
       <span class="file">agent/minimal_agent.py: <code>ask()</code></span></div></li>
-    <li><div class="body"><strong>Python turns the word into a fixed pose.</strong> "up" becomes pitch -30°, yaw 0°, one second, minjerk. It sends <code>POST /api/move/goto</code> to <code>host.openshell.internal:8000</code>.
-      <span class="file">agent/minimal_agent.py: <code>POSES</code> and <code>move_head()</code></span></div></li>
+    <li><div class="body"><strong>Python clamps every number and converts units.</strong> Degrees and millimetres from the model become the daemon's radians and metres, each value clamped to the envelope, at most 16 steps and 30 s. The daemon itself accepts out-of-range poses, so this clamp is the only guard. It sends one <code>POST /api/move/goto</code> per step to <code>host.openshell.internal:8000</code> and waits for each to finish.
+      <span class="file">agent/minimal_agent.py: <code>LIMITS_DEG</code>, <code>to_goto()</code>, <code>perform()</code></span></div></li>
     <li><div class="body"><strong>OpenShell decides.</strong> The active policy either has an allow rule for that method and path or it does not. <span class="deny">Denied</span> returns a 403 with a readable reason. <span class="ok">Allowed</span> forwards the request to the daemon on the host.
       <span class="file">openshell/policy-*.yaml · <code>openshell logs reachy-agent</code> shows ALLOWED / DENIED lines</span></div></li>
     <li><div class="body"><strong>The daemon moves the head.</strong> It solves the six motor angles, runs a 50 Hz control loop, and writes servo packets over USB serial.
       <span class="file">robot/venv/lib/python3.12/site-packages/reachy_mini/daemon/app/routers/move.py · start-daemon.sh</span></div></li>
     <li><div class="body"><strong>The result goes back to the model,</strong> which writes the reply you see: "Nod completed" or "OpenShell policy blocked the request". It does not retry a denial.
       <span class="file">agent/minimal_agent.py: end of <code>main()</code></span></div></li>
-    <li><div class="body"><strong>The host speaks the reply.</strong> <code>voice.sh</code> / <code>listen.py</code> read the <code>[reply]</code> line and call <code>POST /say</code> on the trusted speaker service, which runs Kokoro TTS on the host CPU and plays it on the robot speaker. The policy allows the sandbox only <code>POST /play</code> on that port; a sandbox call to <code>/say</code> gets 403. <code>IGNORE</code> replies are dropped silently.
+    <li><div class="body"><strong>The host speaks the reply.</strong> <code>voice.sh</code> / <code>listen.py</code> read the <code>[reply]</code> line and call <code>POST /say</code> on the trusted speaker service, which runs Kokoro TTS on the host CPU and plays it on the robot speaker. The agent's own <code>speak</code> tool uses the same route through the policy, so Reachy can talk or sing mid-turn. <code>IGNORE</code> replies are dropped silently.
       <span class="file">robot/speaker.py: <code>say()</code> · robot/models/kokoro-v1.0.onnx</span></div></li>
   </ol>
 
@@ -291,7 +291,7 @@
     <text x="270" y="292" text-anchor="middle" font-weight="600">speaker.py → Kokoro TTS</text>
     <text x="270" y="310" text-anchor="middle" class="t-muted">text → WAV · CPU · ~0.5 s</text>
     <text x="270" y="326" text-anchor="middle" class="t-mono">aplay -D plughw:CARD=Audio</text>
-    <text x="270" y="342" text-anchor="middle" class="t-mono">:8042 /say (host only)</text>
+    <text x="270" y="342" text-anchor="middle" class="t-mono">:8042 /say</text>
 
     <!-- speaker -->
     <rect class="box box-robot" x="20" y="270" width="120" height="80" rx="4"/>
@@ -344,7 +344,7 @@
   <p>Consequences: 1 to 2 s between the end of your sentence and the answer, no barge-in or mid-sentence reaction, and the sandbox never sees an audio device, only a WAV on stdin.</p>
 
   <div class="note">
-    <p><strong>Why the split matters.</strong> The model handles fuzzy language but can only emit one of five words. Python owns the numbers. OpenShell owns the yes/no on the endpoint. No prompt injection can turn "look up" into a raw motor command, because the sandbox has no path to <code>/api/move/set_target</code> or the motor routes at all.</p>
+    <p><strong>Why the split matters.</strong> The model handles fuzzy language and now composes motion, but every number it emits passes through Python's clamp, and the sandbox has no path to <code>/api/move/set_target</code> or the motor routes at all. OpenShell owns the yes/no on the endpoint. A bad or injected prompt can make Reachy do an odd dance within safe limits; it cannot exceed the envelope or move when the policy says no. The first version was stricter (five fixed words, no numbers from the model); this one trades that for dancing and singing, and says so.</p>
   </div>
 
   <h2>Where each piece lives</h2>

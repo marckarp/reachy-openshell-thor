@@ -70,26 +70,29 @@ def sounds() -> dict:
     return {"sounds": sorted(SOUNDS)}
 
 
+def _aplay_then_release(file: Path) -> None:
+    try:
+        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, str(file)], check=False, timeout=30)
+    finally:
+        _lock.release()
+
+
 @app.post("/play")
 def play(req: PlayRequest) -> dict:
+    """Starts the sound and returns at once, so the robot can move while the dance tune plays."""
     file = SOUNDS.get(req.name)
     if file is None:
         raise HTTPException(400, f"unknown sound; allowed: {sorted(SOUNDS)}")
     if not _lock.acquire(blocking=False):
         raise HTTPException(429, "a sound is already playing")
-    try:
-        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, str(file)], check=True, timeout=15)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        raise HTTPException(502, f"speaker error: {type(exc).__name__}") from exc
-    finally:
-        _lock.release()
-    return {"status": "played", "name": req.name}
+    threading.Thread(target=_aplay_then_release, args=(file,), daemon=True).start()
+    return {"status": "playing", "name": req.name}
 
 
 @app.post("/say")
 def say(req: SayRequest) -> dict:
-    if not _lock.acquire(blocking=False):
-        raise HTTPException(429, "a sound is already playing")
+    if not _lock.acquire(timeout=20):          # queue behind a sound that is still playing
+        raise HTTPException(429, "speaker busy")
     try:
         samples, rate = tts().create(req.text, voice=VOICE, speed=1.0, lang="en-us")
         with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
