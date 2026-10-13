@@ -61,7 +61,9 @@ SYSTEM_PROMPT = (
     "response; speak returns at once, so the sway happens while you sing. Do not use play_sound for "
     "singing; that is a tune, not your voice. End every sequence at the neutral pose unless asked to "
     "hold. If a tool result says policy_denied, say that OpenShell policy blocked the action and do not "
-    "retry. Never claim you did something you did not call a tool for. You may also answer questions "
+    "retry. Never claim you did something you did not call a tool for; the perform result lists which "
+    "joints actually moved, describe only those. When asked to use antennas or body, set them to clearly "
+    "non-zero values (antennas 40 to 80, body_yaw 30 to 60). You may also answer questions "
     "and chat. Replies are spoken aloud: one or two short plain sentences, no emoji, no markdown, no "
     "stage directions in parentheses. After tools, finish with a short spoken sentence that says what "
     "you just did, in your own words."
@@ -211,7 +213,9 @@ def perform(steps) -> dict:
         r.raise_for_status()
         wait_for(r.json()["uuid"])
         done += 1
-    return {"status": "completed", "steps": done, "seconds": round(sum(b["duration"] for b in bodies), 1)}
+    used = sorted({k for s in steps for k, v in s.items()
+                   if k != "duration" and v not in (0, 0.0, None, [0, 0], [0.0, 0.0])})
+    return {"status": "completed", "steps": done, "seconds": round(sum(b["duration"] for b in bodies), 1), "moved": used}
 
 
 def ask(client: OpenAI, messages: list, **kw):
