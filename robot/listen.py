@@ -16,6 +16,7 @@ import collections
 import io
 import subprocess
 import sys
+import time
 import wave
 from pathlib import Path
 
@@ -113,12 +114,24 @@ def turn(pcm: np.ndarray) -> None:
     if not reply or reply.upper().lstrip("\"'").startswith("IGNORE"):
         print("  (not for me)")
         return
-    if already_spoke or (reply.startswith("(") and reply.endswith(")")):   # spoke via tool, or "(done)"
-        return
-    try:
-        httpx.post(f"{SPEAKER}/say", json={"text": reply[:300]}, timeout=60)
-    except httpx.HTTPError as exc:
-        print(f"  speaker error: {type(exc).__name__}")
+    if not already_spoke and not (reply.startswith("(") and reply.endswith(")")):
+        try:
+            httpx.post(f"{SPEAKER}/say", json={"text": reply[:300]}, timeout=60)
+        except httpx.HTTPError as exc:
+            print(f"  speaker error: {type(exc).__name__}")
+    wait_for_speaker()
+
+
+def wait_for_speaker() -> None:
+    """/say and /play return while still playing; keep the mic closed until the speaker is quiet."""
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        try:
+            if not httpx.get(f"{SPEAKER}/busy", timeout=5).json().get("busy"):
+                return
+        except httpx.HTTPError:
+            return
+        time.sleep(0.2)
 
 
 def listen() -> None:

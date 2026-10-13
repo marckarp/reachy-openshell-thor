@@ -88,8 +88,9 @@ Then `./talk.sh`, or `robot/listen.sh start` to talk out loud. Starting from not
   speaker over ALSA. The daemon's own audio path does not work on this host.
   The sandbox reaches it as `host.openshell.internal:8042`; it accepts names only, never paths.
   It also has `POST /say {"text": ...}` (Kokoro TTS, weights in `robot/models/`), used by the
-  host to speak replies and by the agent's `speak` tool. `/play` returns at once so the robot can
-  dance while the tune plays; `/say` blocks until spoken, so `listen.py` knows when to reopen the mic.
+  host to speak replies and by the agent's `speak` tool. Both `/play` and `/say` return while the
+  audio is still playing, so the robot can dance to the tune or sway while it sings; `listen.py`
+  polls `GET /busy` and keeps the mic closed until the speaker is quiet.
 - `usbreset.sh` fixes the Thor's internal USB hub when the robot vanishes from `lsusb`. Needs sudo.
 - `logs/reachy-daemon.log` daemon log.
 

@@ -56,12 +56,15 @@ SYSTEM_PROMPT = (
     "Patterns: look left is one step yaw 40. Nod is pitch 20 then 0. Shake no is yaw 30, -30, 30, 0. "
     "A dance is one perform call of 8 to 12 quick steps (0.3 to 0.6 s) alternating yaw and roll with "
     "antennas and body_yaw moving too, ending at all zeros; call play_sound 'dance' right before it so "
-    "there is music (it starts playing and returns at once). To sing, write 2 to 4 short lines and pass "
-    "them to speak, then perform a gentle sway. End every sequence at the neutral pose unless asked to "
+    "there is music (it starts playing and returns at once). To sing, you MUST call speak with 2 to 4 "
+    "short lyric lines AND call perform with a slow sway (6 to 10 steps of 0.8 to 1.5 s) in the SAME "
+    "response; speak returns at once, so the sway happens while you sing. Do not use play_sound for "
+    "singing; that is a tune, not your voice. End every sequence at the neutral pose unless asked to "
     "hold. If a tool result says policy_denied, say that OpenShell policy blocked the action and do not "
-    "retry. You may also answer questions and chat. Replies are spoken aloud: one or two short plain "
-    "sentences, no emoji, no markdown, no stage directions in parentheses. After tools, finish with a "
-    "short spoken sentence that says what you just did, in your own words."
+    "retry. Never claim you did something you did not call a tool for. You may also answer questions "
+    "and chat. Replies are spoken aloud: one or two short plain sentences, no emoji, no markdown, no "
+    "stage directions in parentheses. After tools, finish with a short spoken sentence that says what "
+    "you just did, in your own words."
 )
 
 # Always-on listening (robot/listen.py) sends every utterance in the room. The model is the
@@ -165,7 +168,7 @@ def speak(text: str) -> dict:
         return {"status": "policy_denied", "detail": "POST /say not permitted by policy"}
     if r.status_code != 200:
         return {"status": "speaker_error", "http": r.status_code}
-    return {"status": "said", "chars": len(text)}
+    return {"status": "speaking", "chars": len(text)}   # plays in the background on the host
 
 
 def wait_for(move_id: str) -> None:

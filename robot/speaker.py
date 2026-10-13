@@ -8,7 +8,8 @@ host.openshell.internal:8042 and may only call:
 
 The host (voice.sh) may also call, outside any policy:
 
-  POST /say  {"text": "Reachy has looked left."}    Kokoro TTS -> speaker
+  POST /say  {"text": "Reachy has looked left."}    Kokoro TTS -> speaker (returns while playing)
+  GET  /busy                                         {"busy": true} while anything is playing
 
 Only names in SOUNDS are accepted by /play; there is no path, device, or volume parameter.
 Audio goes straight to the Reachy USB audio card over ALSA (the daemon's own audio
@@ -89,17 +90,31 @@ def play(req: PlayRequest) -> dict:
     return {"status": "playing", "name": req.name}
 
 
+@app.get("/busy")
+def busy() -> dict:
+    """True while a sound or speech is playing. listen.py waits on this before reopening the mic."""
+    return {"busy": _lock.locked()}
+
+
+def _aplay_tmp_then_release(path: str) -> None:
+    try:
+        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, path], check=False, timeout=120)
+    finally:
+        Path(path).unlink(missing_ok=True)
+        _lock.release()
+
+
 @app.post("/say")
 def say(req: SayRequest) -> dict:
+    """Synthesizes now, plays in the background, returns at once so the robot can move while talking."""
     if not _lock.acquire(timeout=20):          # queue behind a sound that is still playing
         raise HTTPException(429, "speaker busy")
     try:
         samples, rate = tts().create(req.text, voice=VOICE, speed=1.0, lang="en-us")
-        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-            soundfile.write(wav.name, samples, rate)
-            subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE, wav.name], check=True, timeout=30)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        raise HTTPException(502, f"speaker error: {type(exc).__name__}") from exc
-    finally:
+        wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        soundfile.write(wav.name, samples, rate)
+    except Exception as exc:  # noqa: BLE001
         _lock.release()
-    return {"status": "said", "chars": len(req.text)}
+        raise HTTPException(502, f"tts error: {type(exc).__name__}") from exc
+    threading.Thread(target=_aplay_tmp_then_release, args=(wav.name,), daemon=True).start()
+    return {"status": "speaking", "chars": len(req.text), "seconds": round(len(samples) / rate, 1)}

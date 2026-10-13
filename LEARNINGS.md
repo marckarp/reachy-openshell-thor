@@ -150,9 +150,14 @@ the native Reachy app and a speech adapter (hosted Parakeet + Magpie verified wo
 22. **Omni calls a tool once per step unless told otherwise.** Asked to dance, it issued three
     one-step `perform` calls. One prompt sentence, "put the whole motion in ONE perform call",
     fixed it: one call, 8 steps.
-23. **`/play` must return before the sound ends** or the dance starts after the music. The
-    speaker service plays sounds in a thread; `/say` stays blocking (so `listen.py` knows when
-    to reopen the mic) and waits up to 20 s for a playing sound instead of answering 429.
+23. **`/play` and `/say` must return before the audio ends** or the dance starts after the music
+    and the sway after the song. The speaker service synthesizes, then plays in a thread and
+    returns; `GET /busy` says when it is quiet, and `listen.py` waits on that before reopening the
+    mic. `/say` queues up to 20 s behind a playing sound instead of answering 429.
+25. **The model claims actions it did not take.** Asked to sing, Omni played the dance tune and
+    replied "I sang a short song". Two prompt lines fixed it: "to sing you MUST call speak" and
+    "never claim you did something you did not call a tool for". Check `[model chose]` lines, not
+    the reply, when judging what happened.
 24. **`pkill -f <pattern>` kills the shell running it** when the pattern appears in that shell's own
     command line. To restart the speaker service: `for p in $(pgrep -f "uvicorn speaker:app"); do
     [ "$p" != "$$" ] && kill "$p"; done; robot/start-speaker.sh`.
